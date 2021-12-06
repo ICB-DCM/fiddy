@@ -1,2 +1,3 @@
-# finite_difference_methods
-Finite difference methods.
+# Finite difference methods
+
+Install with `pip install -e .`.
