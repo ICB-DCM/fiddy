@@ -1,0 +1,31 @@
+odes:
+    - stateId: species_x
+      rightHandSide: parameter_k * parameter_p * parameter_p
+      initialValue: 0
+
+parameters: 
+    - parameterId: parameter_k
+      nominalValue: 1
+      parameterScale: lin
+      estimate: 0
+
+    - parameterId: parameter_p
+      nominalValue: 1
+      parameterScale: log10
+      lowerBound: 0.1
+      upperBound: 10
+      estimate: 1
+  
+observables:
+    - observableId: observable_x
+      observableFormula: species_x
+      observableTransformation: lin
+      noiseFormula: noiseParameter1_observable_x
+      noiseDistribution: normal
+
+conditions:
+    - conditionId: k_zero
+      parameter_k: 0
+
+    - conditionId: k_one
+      parameter_k: 1

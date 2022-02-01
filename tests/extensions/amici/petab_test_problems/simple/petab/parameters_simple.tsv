@@ -1,0 +1,2 @@
+parameterId	parameterScale	lowerBound	upperBound	estimate	nominalValue
+parameter_p	log10	0.1	10.0	1.0	1.0
