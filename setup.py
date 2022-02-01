@@ -54,13 +54,25 @@ setup(
     url=f'https://github.com/{org}/{repo}',
     packages=find_packages(exclude=['doc*', 'test*']),
     install_requires=[
+        'joblib',
         'numpy',
+        'pandas',
     ],
     include_package_data=True,
     python_requires=f'>={minimum_python_version}',
     extras_require={
         'tests': [
             'pytest',
+            'sympy',
+            'more-itertools',
         ],
+        'amici': [
+            'amici',
+            'petab',
+        ],
+        'pypesto': [
+            # TODO setup.cfg with dependency on amici, petab
+            'pypesto',
+        ]
     }
 )

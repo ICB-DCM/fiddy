@@ -1,0 +1,236 @@
+import abc
+from dataclasses import dataclass
+from functools import partial
+from typing import Callable, Iterable, List, Tuple
+
+import pandas as pd
+
+from . import quotient
+from .constants import (
+    TYPE_DIMENSION,
+    TYPE_FUNCTION,
+    TYPE_POINT,
+    Difference,
+    GradientCheckMethod,
+)
+from .misc import numpy_array_to_tuple
+#from .quotient import forward, backward, central
+from .step import dstep
+
+
+def gradient_check(
+    function: TYPE_FUNCTION,
+    point: TYPE_POINT,
+    gradient: TYPE_FUNCTION,
+    sizes: Iterable[float] = None,
+    dimensions: Iterable[TYPE_DIMENSION] = None,
+    stop_at_success: bool = True,
+    # TODO or custom Callable
+    fd_gradient_method: GradientCheckMethod = None,
+    #atol: float = 1e-2,
+    #rtol: float = 1e-2,
+    check_protocol: List[Callable[[pd.DataFrame], None]] = None,
+    postprocessor_protocol: List[Callable[[pd.DataFrame], None]] = None,
+) -> Tuple[bool, pd.DataFrame]:
+    """Manage a gradient check.
+
+    Args:
+        point:
+            The point about which to check the gradient.
+        function:
+            The function.
+        gradient:
+            A function to compute the expected gradient at a point.
+        sizes:
+            The sizes of the steps to take.
+            Defaults to `[1e-1, 1e-3, 1e-5, 1e-7, 1e-9]`.
+        dimensions:
+            The dimensions along which to step.
+            Defaults to all dimensions of the point.
+        stop_at_success:
+            Whether to stop gradient checks for a specific parameter
+            as soon as a tolerance is satisfied for its corresponding
+            gradient.
+        method:
+            The method by which to check the gradient.
+        atol:
+            The absolute tolerance. REMOVE?
+        rtol:
+            The relative tolerance. REMOVE?
+        check_protocol:
+            These methods are applied to the results, to perform the checks.
+            Defaults to `default_check_protocol`.
+            Methods in this protocol should set the `"success"` column to `True`
+            if the check passes, and put the reason for success in the
+            `"success_reason"` column.
+        postprocessor_protocol:
+            Similar to `check_protocol`, but applied after `check_protocol`.
+
+    Returns:
+    tuple
+        First value is whether the gradient check passed.
+        Second value contains the values for debugging incorrect gradients.
+    """
+    # Setup, default values
+    results: Iterable[Result] = []
+    if dimensions is None:
+        dimensions = [index for index, _ in enumerate(point)]
+    if sizes is None:
+        sizes = [1e-1, 1e-3, 1e-5, 1e-7, 1e-9]
+    if fd_gradient_method is None:
+        fd_gradient_method = 'central'
+    if check_protocol is None:
+        check_protocol = default_check_protocol
+    if postprocessor_protocol is None:
+        # or? postprocessor_protocol = default_postprocessor_protocol
+        postprocessor_protocol = []
+
+    # TODO allow supplying this, optionally instead of `gradient` callable
+    expected_gradient = gradient(point)
+
+    # Create a method to approximate the gradient. Should only require a
+    # step as its only argument (use as kwarg).
+    # `fd_gradient_callable` should only require a step to run.
+    if fd_gradient_method == 'forward':
+        fd_gradient_callable = \
+            partial(quotient.forward, function=function, point=point)
+    elif fd_gradient_method == 'backward':
+        fd_gradient_callable = \
+            partial(quotient.backward, function=function, point=point)
+    elif fd_gradient_method == 'central':
+        fd_gradient_callable = \
+            partial(quotient.central, function=function, point=point)
+    else:
+        raise NotImplementedError(f'Method: {fd_gradient_method}')
+
+    for size in sizes:
+        for dimension in dimensions:
+            step = dstep(point=point, dimension=dimension, size=size)
+            test_gradient = fd_gradient_callable(step=step)
+            results.append(
+                Result(
+                    #point=numpy_array_to_tuple(point),
+                    dimension=dimension,
+                    size=size,
+                    test_gradient=test_gradient,
+                    expected_gradient=expected_gradient[dimension],
+                    method=fd_gradient_method,
+                )
+            )
+
+    results_df = pd.DataFrame(results)
+    results_df['success'] = False
+    results_df['success_reason'] = None
+    for check in check_protocol:
+        check(results_df)
+    if postprocessor_protocol is not None:
+        for postprocessor in postprocessor_protocol:
+            postprocessor(results_df)
+
+    dimension_result_dfs = []
+    for dimension, df in results_df.groupby('dimension'):
+        # If any checks were successful for this dimension, only include the
+        # first successful check.
+        if df["success"].any():
+            dimension_result_dfs.append(df[df["success"]].head(1))
+        # Else include all checks.
+        else:
+            # TODO somehow only include "best of" failed checks?
+            dimension_result_dfs.append(df)
+    minimal_results_df = pd.concat(dimension_result_dfs)
+    success = minimal_results_df["success"].all()
+
+    return success, results_df
+
+
+@dataclass
+class Result:
+    """Information about a single finite difference gradient computation.
+
+    Attributes:
+        point:
+            The point at which the gradient was computed.
+        size:
+            The size of the step taken.
+        dimension:
+            The dimension along which the gradient was checked.
+        method:
+            The method used to compute the gradient.
+        gradient:
+            The gradient along the dimension.
+    """
+    #point: TYPE_POINT
+    size: float
+    dimension: TYPE_DIMENSION
+    method: GradientCheckMethod
+    test_gradient: float
+    expected_gradient: float
+
+
+# FIXME string literals
+def add_absolute_error(results_df):
+    results_df['|aerr|'] = abs(
+        results_df['test_gradient'] - results_df['expected_gradient']
+    )
+
+
+def check_absolute_error(results_df, tolerance: float = 1e-2):
+    success = results_df['|aerr|'] < tolerance
+    set_success(results_df, success, reason='|aerr|')
+
+
+def add_relative_error(results_df):
+    if '|aerr|' not in results_df.columns:
+        add_absolute_error(results_df)
+    epsilon = results_df['|aerr|'].min() * 1e-10
+
+    results_df['|rerr|'] = abs(
+        results_df['|aerr|'] / (results_df['expected_gradient'] + epsilon)
+    )
+
+
+def check_relative_error(results_df, tolerance: float = 1e-2):
+    success = results_df['|rerr|'] < tolerance
+    set_success(results_df, success, reason='|rerr|')
+
+
+def set_success(results_df: pd.DataFrame, success: pd.Series, reason: str):
+    new_success = success & ~results_df['success']
+    results_df['success'] = results_df['success'] | new_success
+    results_df['success_reason'].mask(
+        new_success,
+        reason,
+        inplace=True,
+    )
+
+
+default_check_protocol = [
+    #set_all_failed,
+    add_absolute_error,
+    add_relative_error,
+    check_absolute_error,
+    check_relative_error,
+]
+
+
+def keep_lowest_error(results_df, error='|rerr|'):
+    keep_indices = []
+
+    for dimension, df in results_df.groupby('dimension'):
+        # Keep best success from each dimension.
+        if df["success"].any():
+            keep_index = df.loc[df["success"]][error].idxmin()
+            keep_indices.append(keep_index)
+        # Include all results if there is no success.
+        else:
+            keep_indices += df.index
+
+    results_df.drop(
+        [index for index in results_df.index if index not in keep_indices],
+        inplace=True,
+    )
+
+
+default_postprocessor_protocol = [
+    keep_lowest_error,
+]
