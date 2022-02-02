@@ -67,9 +67,9 @@ def gradient_check(
             Similar to `check_protocol`, but applied after `check_protocol`.
 
     Returns:
-    tuple
-        First value is whether the gradient check passed.
-        Second value contains the values for debugging incorrect gradients.
+        tuple
+            First value is whether the gradient check passed.
+            Second value contains the values for debugging incorrect gradients.
     """
     # Setup, default values
     results: Iterable[Result] = []
