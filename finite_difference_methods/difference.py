@@ -11,6 +11,8 @@ def forward(
 ):
     """Compute a forward difference.
 
+    .. _forward difference args:
+
     Args:
         function:
             The function.
@@ -32,8 +34,8 @@ def backward(
 ):
     """Compute a backward difference.
 
-    Args:
-        See `difference.forward`.
+    Arguments are documents in the
+    :ref:`forward difference <forward difference args>` method.
 
     Returns:
         The backward difference.
@@ -50,8 +52,8 @@ def central(
 
     NB: The size is halved before stepping forward and backward.
 
-    Args:
-        See `difference.forward`.
+    Arguments are documents in the
+    :ref:`forward difference <forward difference args>` method.
 
     Returns:
         The central difference.

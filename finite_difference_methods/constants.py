@@ -9,7 +9,8 @@ import numpy as np
 #      Would need to make changes to:
 #      - `.quotient` methods
 #      - `.gradient_check` classes
-TYPE_DIMENSION = Iterable[int]
+#      ... or just flatten
+TYPE_DIMENSION = int
 TYPE_POINT = np.ndarray
 TYPE_OUTPUT = Union[float, int]
 TYPE_FUNCTION = Callable[[TYPE_POINT], TYPE_OUTPUT]
