@@ -47,12 +47,9 @@ def simple() -> petab.Problem:
     return petab_problem, point
 
 
-# TODO switch to lotka-volterra
 @pytest.mark.parametrize("problem_generator", [simple, lotka_volterra])
 def test_simulate_petab_to_functions(problem_generator):
     petab_problem, point = problem_generator()
-    #petab_problem = petab_problem_fixture
-    #breakpoint()
     amici_model = amici.petab_import.import_petab_problem(petab_problem)
     amici_solver = amici_model.getSolver()
 
@@ -65,7 +62,6 @@ def test_simulate_petab_to_functions(problem_generator):
         amici_model=amici_model,
         solver=amici_solver,
     )
-
 
     expected_gradient = gradient(point)
 
@@ -80,19 +76,15 @@ def test_simulate_petab_to_functions(problem_generator):
         ],
     )
 
-    success_forward, result_df_forward = gradient_check_partial(
+    success_forward, results_df_forward = gradient_check_partial(
         fd_gradient_method='forward',
     )
-    success_backward, result_df_backward = gradient_check_partial(
+    success_backward, results_df_backward = gradient_check_partial(
         fd_gradient_method='backward',
     )
-    success_central, result_df_central = gradient_check_partial(
+    success_central, results_df_central = gradient_check_partial(
         fd_gradient_method='central',
     )
-
-    print(result_df_forward)
-    print(result_df_backward)
-    print(result_df_central)
 
     # All gradient checks were successful.
     assert success_forward
@@ -103,37 +95,36 @@ def test_simulate_petab_to_functions(problem_generator):
     # Only one result is returned for each dimension.
     dimensions = [i for i in range(len(point))]
     rel_tol = 1e-1
-    results = [result_df_forward, result_df_backward, result_df_central]
-    for result in results:
+    results_dfs = [
+        results_df_forward,
+        results_df_backward,
+        results_df_central,
+    ]
+    for results_df in results_dfs:
         for dimension in dimensions:
-
-            try:
-                assert math.isclose(
-                    one(result.loc[result["dimension"] == dimension]["test_gradient"]),
-                    expected_gradient[dimension],
-                    rel_tol=rel_tol,
-                )
-            except:
-                breakpoint()
-
+            best_test_index = (results_df.loc[results_df["dimension"] == dimension, "test_gradient"] - expected_gradient[dimension]).abs().idxmin()
+            best_test_gradient = results_df.iloc[best_test_index]["test_gradient"]
             assert math.isclose(
-                one(result.loc[result["dimension"] == dimension]["test_gradient"]),
+                best_test_gradient,
                 expected_gradient[dimension],
                 rel_tol=rel_tol,
             )
 
     # Errors with central method are far lower than errors with forward or backward methods.
-    results = [result_df_forward, result_df_backward]
     errors = ["|aerr|", "|rerr|"]
-    for result in results:
+    results_dfs = [
+        results_df_forward,
+        results_df_backward,
+    ]
+    for results_df in results_dfs:
         for dimension in dimensions:
+            # Sufficent for this test to pick a single size, even though different sizes may be better for different errors.
+            # So, test at the minimum absolute error.
+            best_test_index = (results_df.loc[results_df["dimension"] == dimension, "test_gradient"] - expected_gradient[dimension]).abs().idxmin()
+            best_test_index_central = (results_df_central.loc[results_df_central["dimension"] == dimension, "test_gradient"] - expected_gradient[dimension]).abs().idxmin()
             for error in errors:
                 assert (
-                    one(result.loc[result["dimension"] == dimension][error])
-                    > 10*
-                    one(
-                        result_df_central
-                        .loc[result_df_central["dimension"] == dimension]
-                        [error]
-                    )
+                    results_df.iloc[best_test_index][error]
+                    > 5*
+                    results_df_central.iloc[best_test_index_central][error]
                 )
