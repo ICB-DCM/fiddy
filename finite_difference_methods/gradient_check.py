@@ -127,20 +127,42 @@ def gradient_check(
         for postprocessor in postprocessor_protocol:
             postprocessor(results_df)
 
+    # Success is true if each dimension has at least one success.
+    # TODO better name than "simplify" for this
+    simplified_results_df = simplify_results_df(results_df=results_df)
+    success = simplified_results_df["success"].all()
+
+    return success, results_df
+
+
+# FIXME refactor to some `gradient.py` where these FD methods can be used to compute gradients.
+#       would result in or require a similar method
+def simplify_results_df(results_df: pd.DataFrame) -> pd.DataFrame:
+    """Keep only one row per successful dimension, in the dataframe.
+
+    Can be useful for debugging problematic dimensions.
+
+    Args:
+        results_df:
+            The results.
+
+    Returns:
+        pd.DataFrame
+            The simplified results.
+    """
     dimension_result_dfs = []
     for dimension, df in results_df.groupby('dimension'):
         # If any checks were successful for this dimension, only include the
         # first successful check.
         if df["success"].any():
+            # TODO someone only include "best of" successes?
             dimension_result_dfs.append(df[df["success"]].head(1))
         # Else include all checks.
         else:
-            # TODO somehow only include "best of" failed checks?
+            # TODO somehow only include "best of" failures?
             dimension_result_dfs.append(df)
-    minimal_results_df = pd.concat(dimension_result_dfs)
-    success = minimal_results_df["success"].all()
-
-    return success, results_df
+    simplified_results_df = pd.concat(dimension_result_dfs)
+    return simplified_results_df
 
 
 @dataclass
