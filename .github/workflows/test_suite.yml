@@ -40,11 +40,11 @@ jobs:
     # TODO remove once released
     - name: Install custom AMICI
       run: |
-        pip install -e git+https://github.com/AMICI-dev/amici.git@fix_simulate_petab_sllh#egg=amici\&subdirectory=python/sdist
+        pip install --upgrade --upgrade-strategy eager -e git+https://github.com/AMICI-dev/amici.git@fix_simulate_petab_sllh#egg=amici\&subdirectory=python/sdist
 
     - name: Install package
       run: |
-        pip install -e .[tests,amici,pypesto]
+        pip install --upgrade --upgrade-strategy eager -e .[tests,amici,pypesto]
 
     - name: Run tests
       run: |
