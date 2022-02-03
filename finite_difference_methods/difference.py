@@ -34,7 +34,7 @@ def backward(
 ):
     """Compute a backward difference.
 
-    Arguments are documents in the
+    Arguments are documented in the
     :ref:`forward difference <forward difference args>` method.
 
     Returns:
@@ -52,7 +52,7 @@ def central(
 
     NB: The size is halved before stepping forward and backward.
 
-    Arguments are documents in the
+    Arguments are documented in the
     :ref:`forward difference <forward difference args>` method.
 
     Returns:
