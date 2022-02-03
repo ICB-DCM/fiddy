@@ -17,9 +17,9 @@ sys.path.insert(0, os.path.abspath('..'))
 
 # -- Project information -----------------------------------------------------
 
-project = 'Finite difference methods'
-copyright = '2022, Dilan Pathirana'
-author = 'Dilan Pathirana'
+project = 'Fiddy'
+copyright = '2022, Fiddy developers'
+author = 'Fiddy developers'
 
 
 # -- General configuration ---------------------------------------------------

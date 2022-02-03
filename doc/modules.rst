@@ -1,7 +1,7 @@
-finite_difference_methods
-=========================
+fiddy
+=====
 
 .. toctree::
    :maxdepth: 4
 
-   finite_difference_methods
+   fiddy
