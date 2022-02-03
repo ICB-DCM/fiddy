@@ -1,0 +1,51 @@
+name: Test suite
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  build:
+    name: Test suite
+
+    runs-on: ubuntu-20.04
+    strategy:
+      fail-fast: true
+      matrix:
+        python-version: ['3.8', '3.9', '3.10']
+
+    steps:
+    - name: Set up Python ${{ matrix.python-version }}
+      uses: actions/setup-python@v2
+      with:
+        python-version: ${{ matrix.python-version }}
+
+    - uses: actions/checkout@master
+      with:
+        fetch-depth: 20
+
+    - uses: actions/cache@v2
+      with:
+        path: ~/.cache/pip
+        key: ${{ hashFiles('setup.py') }}-py${{ matrix.python-version }}
+
+    # install dependencies
+    - name: apt
+      run: |
+        sudo apt-get update \
+          && sudo apt-get install -y \
+          swig \
+          libatlas-base-dev
+
+    # TODO remove once released
+    - name: Install custom AMICI
+      run: |
+        pip install --upgrade --upgrade-strategy eager -e git+https://github.com/AMICI-dev/amici.git@fix_simulate_petab_sllh#egg=amici\&subdirectory=python/sdist
+
+    - name: Install package
+      run: |
+        pip install --upgrade --upgrade-strategy eager -e .[tests,amici,pypesto]
+
+    - name: Run tests
+      run: |
+        pytest tests/
