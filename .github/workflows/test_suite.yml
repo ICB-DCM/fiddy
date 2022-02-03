@@ -24,6 +24,11 @@ jobs:
       with:
         fetch-depth: 20
 
+    - uses: actions/cache@v2
+      with:
+        path: ~/.cache/pip
+        key: ${{ hashFiles('setup.py') }}-py${{ matrix.python-version }}
+
     # install dependencies
     - name: apt
       run: |
@@ -36,7 +41,6 @@ jobs:
     - name: Install custom AMICI
       run: |
         pip install -e git+https://github.com/AMICI-dev/amici.git@fix_simulate_petab_sllh#egg=amici\&subdirectory=python/sdist
-
 
     - name: Install package
       run: |
