@@ -12,8 +12,8 @@ import numpy as np
 import petab
 import pytest
 
-import finite_difference_methods as fdm
-from finite_difference_methods.extensions.amici import (
+import fiddy
+from fiddy.extensions.amici import (
     simulate_petab_to_cached_functions,
 )
 
@@ -66,7 +66,7 @@ def test_simulate_petab_to_functions(problem_generator):
     expected_gradient = gradient(point)
 
     gradient_check_partial = partial(
-        fdm.gradient_check,
+        fiddy.gradient_check,
         function=function,
         point=point,
         gradient=gradient,

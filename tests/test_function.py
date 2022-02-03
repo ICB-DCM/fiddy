@@ -5,8 +5,7 @@ import pytest
 import time
 from typing import Dict, Iterable, List
 
-import finite_difference_methods as fdm
-from finite_difference_methods import CachedFunction
+from fiddy import CachedFunction
 import numpy as np
 import sympy as sp
 

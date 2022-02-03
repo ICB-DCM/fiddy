@@ -2,8 +2,8 @@ import math
 import pytest
 from typing import Dict, Iterable, List
 
-import finite_difference_methods as fdm
-from finite_difference_methods.gradient_check import simplify_results_df
+import fiddy
+from fiddy.gradient_check import simplify_results_df
 from more_itertools import one
 import numpy as np
 import sympy as sp
@@ -47,21 +47,21 @@ def test_gradient_check(case1):
 
     expected_gradient = case1['gradient'](parameters=point)
 
-    success_forward, results_df_forward = fdm.gradient_check(
+    success_forward, results_df_forward = fiddy.gradient_check(
         function=case1['function'],
         point=point,
         gradient=case1['gradient'],
         sizes=[1e-1, 1e-2, 1e-3, 1e-4, 1e-5, 1e-6, 1e-7, 1e-8, 1e-9, 1e-10, 1e-11, 1e-12, 1e-13],
         fd_gradient_method='forward',
     )
-    success_backward, results_df_backward = fdm.gradient_check(
+    success_backward, results_df_backward = fiddy.gradient_check(
         function=case1['function'],
         point=point,
         gradient=case1['gradient'],
         sizes=[1e-1, 1e-2, 1e-3, 1e-4, 1e-5, 1e-6, 1e-7, 1e-8, 1e-9, 1e-10, 1e-11, 1e-12, 1e-13],
         fd_gradient_method='backward',
     )
-    success_central, results_df_central = fdm.gradient_check(
+    success_central, results_df_central = fiddy.gradient_check(
         function=case1['function'],
         point=point,
         gradient=case1['gradient'],

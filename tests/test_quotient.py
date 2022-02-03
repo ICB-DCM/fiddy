@@ -1,6 +1,6 @@
 import pytest
 
-import finite_difference_methods as fdm
+import fiddy
 import numpy as np
 
 
@@ -20,12 +20,12 @@ def line():
 
 
 def test_forward(line):
-    step = fdm.step.dstep(
+    step = fiddy.step.dstep(
         point=line['point'],
         dimension=line['dimension'],
         size=line['size'],
     )
-    fd = fdm.quotient.forward(
+    fd = fiddy.quotient.forward(
         function=line['function'],
         point=line['point'],
         step=step,
