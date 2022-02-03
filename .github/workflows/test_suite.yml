@@ -44,13 +44,8 @@ jobs:
 
     - name: Install package
       run: |
-        pip install --upgrade --upgrade-strategy eager -e .[tests,amici,pypesto,doc]
+        pip install --upgrade --upgrade-strategy eager -e .[tests,amici,pypesto]
 
     - name: Run tests
       run: |
         pytest tests/
-
-    # TODO remove once built RTD
-    - name: Build documentation
-      run: |
-        cd doc && make html
