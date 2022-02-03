@@ -4,8 +4,8 @@ import os
 import re
 
 
-org = 'dilpath'
-repo = 'finite_difference_methods'
+org = 'ICB-DCM'
+repo = 'fiddy'
 
 
 def read(fname):
@@ -32,8 +32,7 @@ def absolute_links(txt):
     return txt
 
 
-# 3.7.1 for NumPy
-minimum_python_version = '3.7.1'
+minimum_python_version = '3.8.0'  # for NumPy
 if sys.version_info < tuple(map(int, minimum_python_version.split('.'))):
     sys.exit(f'{repo} requires Python >= {minimum_python_version}')
 
