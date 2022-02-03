@@ -34,7 +34,15 @@ extensions = [
     'sphinx.ext.autodoc',
     'sphinx.ext.napoleon',
     'sphinx_autodoc_typehints',
+    'sphinx.ext.intersphinx',
 ]
+
+intersphinx_mapping = {
+    'petab': ('https://petab.readthedocs.io/en/stable/', None),
+    'pandas': ('https://pandas.pydata.org/docs/', None),
+    'numpy': ('https://numpy.org/devdocs/', None),
+    'python': ('https://docs.python.org/3', None),
+}
 
 # sphinx-autodoc-typehints
 typehints_fully_qualified = True
