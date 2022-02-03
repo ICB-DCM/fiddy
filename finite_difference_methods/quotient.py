@@ -87,7 +87,7 @@ def compute(
             The type of finite difference to use.
 
     Returns:
-        The backward difference approximation of the derivative.
+        The finite difference approximation of the derivative.
     """
     size = np.linalg.norm(step)
     method = getattr(difference_methods, difference.value)
