@@ -1,4 +1,4 @@
-# Fiddy
+# fiddy
 
 Finite difference methods, for applications including gradient computation and gradient checks.
 
