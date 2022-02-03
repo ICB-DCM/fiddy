@@ -5,15 +5,16 @@ Subpackages
 -----------
 
 .. toctree::
-   :maxdepth: 4
+   :maxdepth: 6
 
    fiddy.extensions.amici
 
-Module contents
----------------
+..
+    Module contents
+    ---------------
 
-.. automodule:: fiddy.extensions
-   :members:
-   :undoc-members:
-   :show-inheritance:
-   :noindex:
+    .. automodule:: fiddy.extensions
+       :members:
+       :undoc-members:
+       :show-inheritance:
+       :imported-members:

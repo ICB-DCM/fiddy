@@ -11,7 +11,6 @@ fiddy.extensions.amici.amici module
    :members:
    :undoc-members:
    :show-inheritance:
-   :noindex:
 
 Module contents
 ---------------
@@ -20,4 +19,4 @@ Module contents
    :members:
    :undoc-members:
    :show-inheritance:
-   :noindex:
+   :imported-members:

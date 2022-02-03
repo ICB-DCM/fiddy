@@ -5,9 +5,19 @@ Subpackages
 -----------
 
 .. toctree::
-   :maxdepth: 4
+   :maxdepth: 6
 
    fiddy.extensions
+
+Module contents
+---------------
+
+.. automodule:: fiddy
+   :members:
+   :undoc-members:
+   :show-inheritance:
+   :imported-members:
+   :noindex:
 
 Submodules
 ----------
@@ -19,7 +29,6 @@ fiddy.constants module
    :members:
    :undoc-members:
    :show-inheritance:
-   :noindex:
 
 fiddy.difference module
 -----------------------
@@ -28,7 +37,6 @@ fiddy.difference module
    :members:
    :undoc-members:
    :show-inheritance:
-   :noindex:
 
 fiddy.function module
 ---------------------
@@ -37,7 +45,6 @@ fiddy.function module
    :members:
    :undoc-members:
    :show-inheritance:
-   :noindex:
 
 fiddy.gradient\_check module
 ----------------------------
@@ -46,7 +53,6 @@ fiddy.gradient\_check module
    :members:
    :undoc-members:
    :show-inheritance:
-   :noindex:
 
 fiddy.misc module
 -----------------
@@ -55,7 +61,6 @@ fiddy.misc module
    :members:
    :undoc-members:
    :show-inheritance:
-   :noindex:
 
 fiddy.quotient module
 ---------------------
@@ -64,7 +69,6 @@ fiddy.quotient module
    :members:
    :undoc-members:
    :show-inheritance:
-   :noindex:
 
 fiddy.step module
 -----------------
@@ -73,22 +77,3 @@ fiddy.step module
    :members:
    :undoc-members:
    :show-inheritance:
-   :noindex:
-
-fiddy.version module
---------------------
-
-.. automodule:: fiddy.version
-   :members:
-   :undoc-members:
-   :show-inheritance:
-   :noindex:
-
-Module contents
----------------
-
-.. automodule:: fiddy
-   :members:
-   :undoc-members:
-   :show-inheritance:
-   :noindex:
