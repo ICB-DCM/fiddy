@@ -1,3 +1,5 @@
+import mock
+
 # Configuration file for the Sphinx documentation builder.
 #
 # This file only contains a selection of the most common options. For a full
@@ -47,6 +49,10 @@ templates_path = ['_templates']
 # This pattern also affects html_static_path and html_extra_path.
 exclude_patterns = ['_build', 'Thumbs.db', '.DS_Store']
 
+
+autodoc_mock_imports = ['amici', 'amici.amici', 'amici.petab_objective']
+for mod_name in autodoc_mock_imports:
+    sys.modules[mod_name] = mock.MagicMock()
 
 # -- Options for HTML output -------------------------------------------------
 

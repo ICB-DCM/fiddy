@@ -77,6 +77,7 @@ setup(
             'sphinx',
             'sphinx_rtd_theme',
             'sphinx-autodoc-typehints',
+            'mock',
         ]
     }
 )
