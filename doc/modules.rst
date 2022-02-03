@@ -1,5 +1,5 @@
-fiddy
-=====
+Fiddy API reference
+===================
 
 .. toctree::
    :maxdepth: 6
