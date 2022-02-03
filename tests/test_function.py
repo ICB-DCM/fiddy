@@ -43,6 +43,6 @@ def test_cache():
     function_cached_disk.delete_cache()
     function_cached_ram.delete_cache()
 
-    assert time_uncached > 10*time_cached_disk
-    assert time_uncached > 10*time_cached_ram
+    assert time_uncached > 5*time_cached_disk
+    assert time_uncached > 5*time_cached_ram
     assert time_cached_disk > time_cached_ram
