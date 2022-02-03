@@ -7,7 +7,7 @@ from .constants import TYPE_FUNCTION, TYPE_POINT, TYPE_OUTPUT
 
 
 default_memory_kwargs = {
-    'location': 'cache_finite_difference_methods',
+    'location': 'cache_fiddy',
     'verbose': 0,
 }
 ram_cache_parent_path = Path("/dev/shm")
