@@ -127,3 +127,9 @@ dmypy.json
 
 # Pyre type checker
 .pyre/
+
+
+amici_models/
+cache_finite_difference_methods/
+doc/_build/
+doc/generated/

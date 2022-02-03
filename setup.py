@@ -73,6 +73,11 @@ setup(
         'pypesto': [
             # TODO setup.cfg with dependency on amici, petab
             'pypesto',
+        ],
+        'doc': [
+            'sphinx',
+            'sphinx_rtd_theme',
+            'sphinx-autodoc-typehints',
         ]
     }
 )

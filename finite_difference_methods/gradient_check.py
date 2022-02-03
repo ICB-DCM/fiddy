@@ -67,9 +67,8 @@ def gradient_check(
             Similar to `check_protocol`, but applied after `check_protocol`.
 
     Returns:
-    tuple
-        First value is whether the gradient check passed.
-        Second value contains the values for debugging incorrect gradients.
+        (1) Whether the gradient check passed, and (2) full results,
+        for debugging incorrect gradients and further analysis.
     """
     # Setup, default values
     results: Iterable[Result] = []
@@ -167,26 +166,19 @@ def simplify_results_df(results_df: pd.DataFrame) -> pd.DataFrame:
 
 @dataclass
 class Result:
-    """Information about a single finite difference gradient computation.
-
-    Attributes:
-        point:
-            The point at which the gradient was computed.
-        size:
-            The size of the step taken.
-        dimension:
-            The dimension along which the gradient was checked.
-        method:
-            The method used to compute the gradient.
-        gradient:
-            The gradient along the dimension.
-    """
-    #point: TYPE_POINT
+    """Information about a single finite difference gradient computation."""
+    # """The point at which the gradient was computed."""
+    # point: TYPE_POINT
     size: float
+    """The size of the step taken."""
     dimension: TYPE_DIMENSION
+    """The dimension along which the gradient was checked."""
     method: GradientCheckMethod
+    """The method used to compute the gradient."""
     test_gradient: float
+    """The (finite difference) gradient."""
     expected_gradient: float
+    """The expected gradient."""
 
 
 # FIXME string literals

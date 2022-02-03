@@ -1,7 +1,9 @@
+from typing import Tuple
+
 import numpy as np
 
 
-def numpy_array_to_tuple(array: np.ndarray):
+def numpy_array_to_tuple(array: np.ndarray) -> Tuple:
     """Convert a NumPy array to a tuple.
 
     Useful when arrays should be hashable.
@@ -11,9 +13,10 @@ def numpy_array_to_tuple(array: np.ndarray):
             The array.
 
     Returns:
-    tuple
         The tuple.
     """
+    # Iterate over the array, turning iterable
+    # elements also into tuples, recursively.
     try:
         return tuple(
             numpy_array_to_tuple(element)

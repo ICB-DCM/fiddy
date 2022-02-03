@@ -41,7 +41,7 @@ def simulate_petab_to_cached_functions(
     *args,
     **kwargs,
 ) -> Tuple[TYPE_FUNCTION, TYPE_FUNCTION]:
-    """Convert AMICI output to compatible gradient check functions.
+    r"""Convert AMICI output to compatible gradient check functions.
 
     Note that all gradients are provided on linear scale. The correction from
     `'log10'` scale is automatically done.
@@ -53,14 +53,15 @@ def simulate_petab_to_cached_functions(
         parameter_ids:
             The IDs of the parameters, in the order that parameter values will
             be supplied. Defaults to `petab_problem.parameter_df.index`.
-        The PEtab problem.
-        *args, **kwargs:
+        petab_problem:
+            The PEtab problem.
+        \*args, \*\*kwargs:
             Passed to `simulate_petab`.
 
     Returns:
-    tuple
-        1: A method to compute the function at a point.
-        2: A method to compute the gradient at a point.
+        tuple
+            1: A method to compute the function at a point.
+            2: A method to compute the gradient at a point.
     """
     if parameter_ids is None:
         parameter_ids = list(petab_problem.parameter_df.index)
