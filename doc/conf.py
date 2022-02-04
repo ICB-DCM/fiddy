@@ -1,3 +1,5 @@
+import mock
+
 # Configuration file for the Sphinx documentation builder.
 #
 # This file only contains a selection of the most common options. For a full
@@ -9,7 +11,7 @@
 # If extensions (or modules to document with autodoc) are in another directory,
 # add these directories to sys.path here. If the directory is relative to the
 # documentation root, use os.path.abspath to make it absolute, like shown here.
-#
+
 import os
 import sys
 sys.path.insert(0, os.path.abspath('..'))
@@ -32,7 +34,15 @@ extensions = [
     'sphinx.ext.autodoc',
     'sphinx.ext.napoleon',
     'sphinx_autodoc_typehints',
+    'sphinx.ext.intersphinx',
 ]
+
+intersphinx_mapping = {
+    'petab': ('https://petab.readthedocs.io/en/stable/', None),
+    'pandas': ('https://pandas.pydata.org/docs/', None),
+    'numpy': ('https://numpy.org/devdocs/', None),
+    'python': ('https://docs.python.org/3', None),
+}
 
 # sphinx-autodoc-typehints
 typehints_fully_qualified = True
@@ -47,6 +57,10 @@ templates_path = ['_templates']
 # This pattern also affects html_static_path and html_extra_path.
 exclude_patterns = ['_build', 'Thumbs.db', '.DS_Store']
 
+
+autodoc_mock_imports = ['amici', 'amici.amici', 'amici.petab_objective']
+for mod_name in autodoc_mock_imports:
+    sys.modules[mod_name] = mock.MagicMock()
 
 # -- Options for HTML output -------------------------------------------------
 

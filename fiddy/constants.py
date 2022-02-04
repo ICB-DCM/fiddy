@@ -3,6 +3,10 @@ from typing import Callable, Iterable, Union
 
 import numpy as np
 
+__all__ = [
+    'TYPE_DIMENSION', 'TYPE_OUTPUT', 'TYPE_POINT', 'TYPE_FUNCTION',
+    'Difference', 'GradientCheckMethod'
+]
 
 # Currently only 1D arrays are supported.
 # TODO Helper methods to support nD arrays, or handle in background.
