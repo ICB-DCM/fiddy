@@ -1,13 +1,8 @@
-from functools import partial
 import os
-from pathlib import Path
-import pytest
 import time
-from typing import Dict, Iterable, List
 
 from fiddy import CachedFunction
 import numpy as np
-import sympy as sp
 
 
 def test_cache():

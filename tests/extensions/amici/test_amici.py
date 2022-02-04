@@ -7,7 +7,6 @@ import amici
 import amici.petab_import
 import amici.petab_objective
 import math
-from more_itertools import one
 import numpy as np
 import petab
 import pytest
@@ -106,7 +105,8 @@ def test_simulate_petab_to_functions(problem_generator):
     assert success_backward
     assert success_central
 
-    # The test gradient is close to the expected gradient for both parameters and all methods.
+    # The test gradient is close to the expected gradient for both parameters
+    # and all methods.
     # Only one result is returned for each dimension.
     dimensions = [i for i in range(len(point))]
     rel_tol = 1e-1
@@ -136,7 +136,8 @@ def test_simulate_petab_to_functions(problem_generator):
                 rel_tol=rel_tol,
             )
 
-    # Errors with central method are far lower than errors with forward or backward methods.
+    # Errors with central method are far lower than errors with forward or
+    # backward methods.
     errors = ["|aerr|", "|rerr|"]
     results_dfs = [
         results_df_forward,
@@ -144,7 +145,8 @@ def test_simulate_petab_to_functions(problem_generator):
     ]
     for results_df in results_dfs:
         for dimension in dimensions:
-            # Sufficent for this test to pick a single size, even though different sizes may be better for different errors.
+            # Sufficent for this test to pick a single size, even though
+            # different sizes may be better for different errors.
             # So, test at the minimum absolute error.
             best_test_index = (
                 (

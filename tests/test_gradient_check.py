@@ -1,6 +1,6 @@
 import math
 import pytest
-from typing import Dict, Iterable, List
+from typing import Iterable, List
 
 import fiddy
 from fiddy.gradient_check import simplify_results_df
@@ -37,14 +37,13 @@ def case1():
     return {
         "function": function,
         "gradient": gradient,
-        #'point': np.array([3, 4]),
-        #'size': 1e-10,
+        # 'point': np.array([3, 4]),
+        # 'size': 1e-10,
     }
 
 
 def test_gradient_check(case1):
     point = np.array([3, 4])
-    size = 1e-10
     rel_tol = 1e-1
 
     sizes = [
@@ -96,7 +95,8 @@ def test_gradient_check(case1):
     simplified_results_df_backward = simplify_results_df(results_df_backward)
     simplified_results_df_central = simplify_results_df(results_df_central)
 
-    # The test gradient is close to the expected gradient for both parameters and all methods.
+    # The test gradient is close to the expected gradient for both parameters
+    # and all methods.
     # Only one result is returned for each dimension.
     dimensions = [0, 1]
     simplified_results_dfs = [
@@ -116,7 +116,8 @@ def test_gradient_check(case1):
                 rel_tol=rel_tol,
             )
 
-    # Errors with central method are far lower than errors with forward or backward methods.
+    # Errors with central method are far lower than errors with forward or
+    # backward methods.
     simplified_results_dfs = [
         simplified_results_df_forward,
         simplified_results_df_backward,
