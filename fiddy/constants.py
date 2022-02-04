@@ -4,8 +4,12 @@ from typing import Callable, Iterable, Union
 import numpy as np
 
 __all__ = [
-    'TYPE_DIMENSION', 'TYPE_OUTPUT', 'TYPE_POINT', 'TYPE_FUNCTION',
-    'Difference', 'GradientCheckMethod'
+    "TYPE_DIMENSION",
+    "TYPE_FUNCTION",
+    "TYPE_OUTPUT",
+    "TYPE_POINT",
+    "Difference",
+    "GradientCheckMethod",
 ]
 
 # Currently only 1D arrays are supported.
@@ -15,18 +19,18 @@ __all__ = [
 #      - `.gradient_check` classes
 #      ... or just flatten
 TYPE_DIMENSION = int
-TYPE_POINT = np.ndarray
-TYPE_OUTPUT = Union[float, int]
 TYPE_FUNCTION = Callable[[TYPE_POINT], TYPE_OUTPUT]
+TYPE_OUTPUT = Union[float, int]
+TYPE_POINT = np.ndarray
 
 
 class Difference(str, Enum):
-    FORWARD = 'forward'
-    BACKWARD = 'backward'
-    CENTRAL = 'central'
+    BACKWARD = "backward"
+    CENTRAL = "central"
+    FORWARD = "forward"
 
 
 class GradientCheckMethod(str, Enum):
-    FORWARD = Difference.FORWARD
     BACKWARD = Difference.BACKWARD
     CENTRAL = Difference.CENTRAL
+    FORWARD = Difference.FORWARD
