@@ -24,25 +24,29 @@ RTOL: float = 1e-3
 
 
 def lotka_volterra() -> petab.Problem:
-    petab_problem = petab.Problem.from_yaml(str(
-        Path(__file__).parent
-        / 'petab_test_problems'
-        / 'lotka_volterra'
-        / 'petab'
-        / 'problem.yaml'
-    ))
+    petab_problem = petab.Problem.from_yaml(
+        str(
+            Path(__file__).parent
+            / "petab_test_problems"
+            / "lotka_volterra"
+            / "petab"
+            / "problem.yaml"
+        )
+    )
     point = np.array([2, 3])
     return petab_problem, point
 
 
 def simple() -> petab.Problem:
-    petab_problem = petab.Problem.from_yaml(str(
-        Path(__file__).parent
-        / 'petab_test_problems'
-        / 'simple'
-        / 'petab'
-        / 'problem.yaml'
-    ))
+    petab_problem = petab.Problem.from_yaml(
+        str(
+            Path(__file__).parent
+            / "petab_test_problems"
+            / "simple"
+            / "petab"
+            / "problem.yaml"
+        )
+    )
     point = np.array([1])
     return petab_problem, point
 
@@ -71,19 +75,30 @@ def test_simulate_petab_to_functions(problem_generator):
         point=point,
         gradient=gradient,
         sizes=[
-            1e-1, 1e-2, 1e-3, 1e-4, 1e-5, 1e-6, 1e-7, 1e-8, 1e-9, 1e-10, 1e-11,
-            1e-12, 1e-13,
+            1e-1,
+            1e-2,
+            1e-3,
+            1e-4,
+            1e-5,
+            1e-6,
+            1e-7,
+            1e-8,
+            1e-9,
+            1e-10,
+            1e-11,
+            1e-12,
+            1e-13,
         ],
     )
 
     success_forward, results_df_forward = gradient_check_partial(
-        fd_gradient_method='forward',
+        fd_gradient_method="forward",
     )
     success_backward, results_df_backward = gradient_check_partial(
-        fd_gradient_method='backward',
+        fd_gradient_method="backward",
     )
     success_central, results_df_central = gradient_check_partial(
-        fd_gradient_method='central',
+        fd_gradient_method="central",
     )
 
     # All gradient checks were successful.
@@ -102,8 +117,19 @@ def test_simulate_petab_to_functions(problem_generator):
     ]
     for results_df in results_dfs:
         for dimension in dimensions:
-            best_test_index = (results_df.loc[results_df["dimension"] == dimension, "test_gradient"] - expected_gradient[dimension]).abs().idxmin()
-            best_test_gradient = results_df.iloc[best_test_index]["test_gradient"]
+            best_test_index = (
+                (
+                    results_df.loc[
+                        results_df["dimension"] == dimension, "test_gradient"
+                    ]
+                    - expected_gradient[dimension]
+                )
+                .abs()
+                .idxmin()
+            )
+            best_test_gradient = results_df.iloc[best_test_index][
+                "test_gradient"
+            ]
             assert math.isclose(
                 best_test_gradient,
                 expected_gradient[dimension],
@@ -120,11 +146,30 @@ def test_simulate_petab_to_functions(problem_generator):
         for dimension in dimensions:
             # Sufficent for this test to pick a single size, even though different sizes may be better for different errors.
             # So, test at the minimum absolute error.
-            best_test_index = (results_df.loc[results_df["dimension"] == dimension, "test_gradient"] - expected_gradient[dimension]).abs().idxmin()
-            best_test_index_central = (results_df_central.loc[results_df_central["dimension"] == dimension, "test_gradient"] - expected_gradient[dimension]).abs().idxmin()
+            best_test_index = (
+                (
+                    results_df.loc[
+                        results_df["dimension"] == dimension, "test_gradient"
+                    ]
+                    - expected_gradient[dimension]
+                )
+                .abs()
+                .idxmin()
+            )
+            best_test_index_central = (
+                (
+                    results_df_central.loc[
+                        results_df_central["dimension"] == dimension,
+                        "test_gradient",
+                    ]
+                    - expected_gradient[dimension]
+                )
+                .abs()
+                .idxmin()
+            )
             for error in errors:
                 assert (
                     results_df.iloc[best_test_index][error]
-                    > 5*
-                    results_df_central.iloc[best_test_index_central][error]
+                    > 5
+                    * results_df_central.iloc[best_test_index_central][error]
                 )
