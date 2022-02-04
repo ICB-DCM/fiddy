@@ -58,4 +58,4 @@ def central(
     Returns:
         The central difference.
     """
-    return function(point + step/2) - function(point - step/2)
+    return function(point + step / 2) - function(point - step / 2)

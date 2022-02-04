@@ -7,14 +7,15 @@ from .constants import TYPE_FUNCTION, TYPE_POINT, TYPE_OUTPUT
 
 
 default_memory_kwargs = {
-    'location': 'cache_fiddy',
-    'verbose': 0,
+    "location": "cache_fiddy",
+    "verbose": 0,
 }
 ram_cache_parent_path = Path("/dev/shm")
 
 
 class Function:
     """Wrapper for functions."""
+
     def __init__(
         self,
         function: TYPE_FUNCTION,
@@ -60,10 +61,11 @@ class CachedFunction(Function):
             ram_cache:
                 Whether to cache in RAM. If `False`, disk is used instead.
         """
-        self.cache_path = \
-            kwargs.get('location', default_memory_kwargs['location'])
+        self.cache_path = kwargs.get(
+            "location", default_memory_kwargs["location"]
+        )
         if ram_cache:
-            if 'location' in kwargs:
+            if "location" in kwargs:
                 raise ValueError(
                     "Do not supply a location when using `ram_cache`."
                 )
@@ -72,10 +74,11 @@ class CachedFunction(Function):
                     "The standard Linux shared memory location '/dev/shm' "
                     "does not exist."
                 )
-            self.cache_path = \
-                ram_cache_parent_path / default_memory_kwargs['location']
+            self.cache_path = (
+                ram_cache_parent_path / default_memory_kwargs["location"]
+            )
         self.cache_path = Path(self.cache_path).resolve()
-        kwargs['location'] = str(self.cache_path)
+        kwargs["location"] = str(self.cache_path)
 
         memory = joblib.Memory(**{**default_memory_kwargs, **kwargs})
         self.function = memory.cache(function)
