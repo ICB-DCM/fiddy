@@ -1,4 +1,3 @@
-import abc
 from dataclasses import dataclass
 from functools import partial
 from typing import Callable, Iterable, List, Tuple
@@ -10,10 +9,8 @@ from .constants import (
     TYPE_DIMENSION,
     TYPE_FUNCTION,
     TYPE_POINT,
-    Difference,
     GradientCheckMethod,
 )
-from .misc import numpy_array_to_tuple
 from .step import dstep
 
 
@@ -59,8 +56,8 @@ def gradient_check(
         check_protocol:
             These methods are applied to the results, to perform the checks.
             Defaults to `default_check_protocol`.
-            Methods in this protocol should set the `"success"` column to `True`
-            if the check passes, and put the reason for success in the
+            Methods in this protocol should set the `"success"` column to
+            `True` if the check passes, and put the reason for success in the
             `"success_reason"` column.
         postprocessor_protocol:
             Similar to `check_protocol`, but applied after `check_protocol`.
@@ -135,7 +132,8 @@ def gradient_check(
     return success, results_df
 
 
-# FIXME refactor to some `gradient.py` where these FD methods can be used to compute gradients.
+# FIXME refactor to some `gradient.py` where these FD methods can be used to
+#       compute gradients.
 #       would result in or require a similar method
 def simplify_results_df(results_df: pd.DataFrame) -> pd.DataFrame:
     """Keep only one row per successful dimension, in the dataframe.

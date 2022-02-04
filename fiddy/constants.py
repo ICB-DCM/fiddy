@@ -1,5 +1,5 @@
 from enum import Enum
-from typing import Callable, Iterable, Union
+from typing import Callable, Union
 
 import numpy as np
 
@@ -19,9 +19,9 @@ __all__ = [
 #      - `.gradient_check` classes
 #      ... or just flatten
 TYPE_DIMENSION = int
-TYPE_FUNCTION = Callable[[TYPE_POINT], TYPE_OUTPUT]
 TYPE_OUTPUT = Union[float, int]
 TYPE_POINT = np.ndarray
+TYPE_FUNCTION = Callable[[TYPE_POINT], TYPE_OUTPUT]
 
 
 class Difference(str, Enum):

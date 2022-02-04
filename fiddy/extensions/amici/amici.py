@@ -1,7 +1,6 @@
 from functools import partial
 from typing import Any, Callable, Dict, List, Tuple
 
-import amici
 import numpy as np
 from amici.petab_objective import LLH, SLLH
 import petab
