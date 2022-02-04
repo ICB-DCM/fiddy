@@ -18,9 +18,6 @@ def numpy_array_to_tuple(array: np.ndarray) -> Tuple:
     # Iterate over the array, turning iterable
     # elements also into tuples, recursively.
     try:
-        return tuple(
-            numpy_array_to_tuple(element)
-            for element in array
-        )
+        return tuple(numpy_array_to_tuple(element) for element in array)
     except TypeError:
         return array

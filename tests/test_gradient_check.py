@@ -1,6 +1,6 @@
 import math
 import pytest
-from typing import Dict, Iterable, List
+from typing import Iterable, List
 
 import fiddy
 from fiddy.gradient_check import simplify_results_df
@@ -11,9 +11,11 @@ import sympy as sp
 
 @pytest.fixture
 def case1():
-    parameter_ids = ['k1', 'k2']
-    equation = sp.sympify('3 + 5 * k1 + 2 * k2^2 + k1 ^ k2')
-    derivatives = [equation.diff(parameter_id) for parameter_id in parameter_ids]
+    parameter_ids = ["k1", "k2"]
+    equation = sp.sympify("3 + 5 * k1 + 2 * k2^2 + k1 ^ k2")
+    derivatives = [
+        equation.diff(parameter_id) for parameter_id in parameter_ids
+    ]
 
     def function(
         parameters: Iterable[float],
@@ -33,40 +35,55 @@ def case1():
         ]
 
     return {
-        'function': function,
-        'gradient': gradient,
-        #'point': np.array([3, 4]),
-        #'size': 1e-10,
+        "function": function,
+        "gradient": gradient,
+        # 'point': np.array([3, 4]),
+        # 'size': 1e-10,
     }
 
 
 def test_gradient_check(case1):
-    point = np.array([3,4])
-    size = 1e-10
+    point = np.array([3, 4])
     rel_tol = 1e-1
 
-    expected_gradient = case1['gradient'](parameters=point)
+    sizes = [
+        1e-1,
+        1e-2,
+        1e-3,
+        1e-4,
+        1e-5,
+        1e-6,
+        1e-7,
+        1e-8,
+        1e-9,
+        1e-10,
+        1e-11,
+        1e-12,
+        1e-13,
+    ]
+
+    expected_gradient = case1["gradient"](parameters=point)
 
     success_forward, results_df_forward = fiddy.gradient_check(
-        function=case1['function'],
+        function=case1["function"],
         point=point,
-        gradient=case1['gradient'],
-        sizes=[1e-1, 1e-2, 1e-3, 1e-4, 1e-5, 1e-6, 1e-7, 1e-8, 1e-9, 1e-10, 1e-11, 1e-12, 1e-13],
-        fd_gradient_method='forward',
+        gradient=case1["gradient"],
+        sizes=sizes,
+        fd_gradient_method="forward",
     )
     success_backward, results_df_backward = fiddy.gradient_check(
-        function=case1['function'],
+        function=case1["function"],
         point=point,
-        gradient=case1['gradient'],
-        sizes=[1e-1, 1e-2, 1e-3, 1e-4, 1e-5, 1e-6, 1e-7, 1e-8, 1e-9, 1e-10, 1e-11, 1e-12, 1e-13],
-        fd_gradient_method='backward',
+        gradient=case1["gradient"],
+        sizes=sizes,
+        fd_gradient_method="backward",
     )
     success_central, results_df_central = fiddy.gradient_check(
-        function=case1['function'],
+        function=case1["function"],
         point=point,
-        gradient=case1['gradient'],
-        sizes=[1e-1, 1e-2, 1e-3, 1e-4, 1e-5, 1e-6, 1e-7, 1e-8, 1e-9, 1e-10, 1e-11, 1e-12, 1e-13],
-        fd_gradient_method='central',
+        gradient=case1["gradient"],
+        sizes=sizes,
+        fd_gradient_method="central",
     )
 
     # All gradient checks were successful.
@@ -78,7 +95,8 @@ def test_gradient_check(case1):
     simplified_results_df_backward = simplify_results_df(results_df_backward)
     simplified_results_df_central = simplify_results_df(results_df_central)
 
-    # The test gradient is close to the expected gradient for both parameters and all methods.
+    # The test gradient is close to the expected gradient for both parameters
+    # and all methods.
     # Only one result is returned for each dimension.
     dimensions = [0, 1]
     simplified_results_dfs = [
@@ -89,12 +107,17 @@ def test_gradient_check(case1):
     for simplified_results_df in simplified_results_dfs:
         for dimension in dimensions:
             assert math.isclose(
-                one(simplified_results_df.loc[simplified_results_df["dimension"] == dimension]["test_gradient"]),
+                one(
+                    simplified_results_df.loc[
+                        simplified_results_df["dimension"] == dimension
+                    ]["test_gradient"]
+                ),
                 expected_gradient[dimension],
                 rel_tol=rel_tol,
             )
 
-    # Errors with central method are far lower than errors with forward or backward methods.
+    # Errors with central method are far lower than errors with forward or
+    # backward methods.
     simplified_results_dfs = [
         simplified_results_df_forward,
         simplified_results_df_backward,
@@ -103,8 +126,12 @@ def test_gradient_check(case1):
     for simplified_results_df in simplified_results_dfs:
         for dimension in dimensions:
             for error in errors:
-                assert (
-                    one(simplified_results_df.loc[simplified_results_df["dimension"] == dimension][error])
-                    > 10*
-                    one(simplified_results_df_central.loc[simplified_results_df_central["dimension"] == dimension][error])
+                assert one(
+                    simplified_results_df.loc[
+                        simplified_results_df["dimension"] == dimension
+                    ][error]
+                ) > 10 * one(
+                    simplified_results_df_central.loc[
+                        simplified_results_df_central["dimension"] == dimension
+                    ][error]
                 )

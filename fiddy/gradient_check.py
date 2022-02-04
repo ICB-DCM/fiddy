@@ -1,4 +1,3 @@
-import abc
 from dataclasses import dataclass
 from functools import partial
 from typing import Callable, Iterable, List, Tuple
@@ -10,11 +9,8 @@ from .constants import (
     TYPE_DIMENSION,
     TYPE_FUNCTION,
     TYPE_POINT,
-    Difference,
     GradientCheckMethod,
 )
-from .misc import numpy_array_to_tuple
-#from .quotient import forward, backward, central
 from .step import dstep
 
 
@@ -27,8 +23,8 @@ def gradient_check(
     stop_at_success: bool = True,
     # TODO or custom Callable
     fd_gradient_method: GradientCheckMethod = None,
-    #atol: float = 1e-2,
-    #rtol: float = 1e-2,
+    # atol: float = 1e-2,  # TODO
+    # rtol: float = 1e-2,  # TODO
     check_protocol: List[Callable[[pd.DataFrame], None]] = None,
     postprocessor_protocol: List[Callable[[pd.DataFrame], None]] = None,
 ) -> Tuple[bool, pd.DataFrame]:
@@ -60,8 +56,8 @@ def gradient_check(
         check_protocol:
             These methods are applied to the results, to perform the checks.
             Defaults to `default_check_protocol`.
-            Methods in this protocol should set the `"success"` column to `True`
-            if the check passes, and put the reason for success in the
+            Methods in this protocol should set the `"success"` column to
+            `True` if the check passes, and put the reason for success in the
             `"success_reason"` column.
         postprocessor_protocol:
             Similar to `check_protocol`, but applied after `check_protocol`.
@@ -77,7 +73,7 @@ def gradient_check(
     if sizes is None:
         sizes = [1e-1, 1e-3, 1e-5, 1e-7, 1e-9]
     if fd_gradient_method is None:
-        fd_gradient_method = 'central'
+        fd_gradient_method = "central"
     if check_protocol is None:
         check_protocol = default_check_protocol
     if postprocessor_protocol is None:
@@ -90,17 +86,20 @@ def gradient_check(
     # Create a method to approximate the gradient. Should only require a
     # step as its only argument (use as kwarg).
     # `fd_gradient_callable` should only require a step to run.
-    if fd_gradient_method == 'forward':
-        fd_gradient_callable = \
-            partial(quotient.forward, function=function, point=point)
-    elif fd_gradient_method == 'backward':
-        fd_gradient_callable = \
-            partial(quotient.backward, function=function, point=point)
-    elif fd_gradient_method == 'central':
-        fd_gradient_callable = \
-            partial(quotient.central, function=function, point=point)
+    if fd_gradient_method == "forward":
+        fd_gradient_callable = partial(
+            quotient.forward, function=function, point=point
+        )
+    elif fd_gradient_method == "backward":
+        fd_gradient_callable = partial(
+            quotient.backward, function=function, point=point
+        )
+    elif fd_gradient_method == "central":
+        fd_gradient_callable = partial(
+            quotient.central, function=function, point=point
+        )
     else:
-        raise NotImplementedError(f'Method: {fd_gradient_method}')
+        raise NotImplementedError(f"Method: {fd_gradient_method}")
 
     for size in sizes:
         for dimension in dimensions:
@@ -108,7 +107,6 @@ def gradient_check(
             test_gradient = fd_gradient_callable(step=step)
             results.append(
                 Result(
-                    #point=numpy_array_to_tuple(point),
                     dimension=dimension,
                     size=size,
                     test_gradient=test_gradient,
@@ -118,8 +116,8 @@ def gradient_check(
             )
 
     results_df = pd.DataFrame(results)
-    results_df['success'] = False
-    results_df['success_reason'] = None
+    results_df["success"] = False
+    results_df["success_reason"] = None
     for check in check_protocol:
         check(results_df)
     if postprocessor_protocol is not None:
@@ -134,7 +132,8 @@ def gradient_check(
     return success, results_df
 
 
-# FIXME refactor to some `gradient.py` where these FD methods can be used to compute gradients.
+# FIXME refactor to some `gradient.py` where these FD methods can be used to
+#       compute gradients.
 #       would result in or require a similar method
 def simplify_results_df(results_df: pd.DataFrame) -> pd.DataFrame:
     """Keep only one row per successful dimension, in the dataframe.
@@ -150,7 +149,7 @@ def simplify_results_df(results_df: pd.DataFrame) -> pd.DataFrame:
             The simplified results.
     """
     dimension_result_dfs = []
-    for dimension, df in results_df.groupby('dimension'):
+    for dimension, df in results_df.groupby("dimension"):
         # If any checks were successful for this dimension, only include the
         # first successful check.
         if df["success"].any():
@@ -167,8 +166,7 @@ def simplify_results_df(results_df: pd.DataFrame) -> pd.DataFrame:
 @dataclass
 class Result:
     """Information about a single finite difference gradient computation."""
-    # """The point at which the gradient was computed."""
-    # point: TYPE_POINT
+
     size: float
     """The size of the step taken."""
     dimension: TYPE_DIMENSION
@@ -183,35 +181,35 @@ class Result:
 
 # FIXME string literals
 def add_absolute_error(results_df):
-    results_df['|aerr|'] = abs(
-        results_df['test_gradient'] - results_df['expected_gradient']
+    results_df["|aerr|"] = abs(
+        results_df["test_gradient"] - results_df["expected_gradient"]
     )
 
 
 def check_absolute_error(results_df, tolerance: float = 1e-2):
-    success = results_df['|aerr|'] < tolerance
-    set_success(results_df, success, reason='|aerr|')
+    success = results_df["|aerr|"] < tolerance
+    set_success(results_df, success, reason="|aerr|")
 
 
 def add_relative_error(results_df):
-    if '|aerr|' not in results_df.columns:
+    if "|aerr|" not in results_df.columns:
         add_absolute_error(results_df)
-    epsilon = results_df['|aerr|'].min() * 1e-10
+    epsilon = results_df["|aerr|"].min() * 1e-10
 
-    results_df['|rerr|'] = abs(
-        results_df['|aerr|'] / (results_df['expected_gradient'] + epsilon)
+    results_df["|rerr|"] = abs(
+        results_df["|aerr|"] / (results_df["expected_gradient"] + epsilon)
     )
 
 
 def check_relative_error(results_df, tolerance: float = 1e-2):
-    success = results_df['|rerr|'] < tolerance
-    set_success(results_df, success, reason='|rerr|')
+    success = results_df["|rerr|"] < tolerance
+    set_success(results_df, success, reason="|rerr|")
 
 
 def set_success(results_df: pd.DataFrame, success: pd.Series, reason: str):
-    new_success = success & ~results_df['success']
-    results_df['success'] = results_df['success'] | new_success
-    results_df['success_reason'].mask(
+    new_success = success & ~results_df["success"]
+    results_df["success"] = results_df["success"] | new_success
+    results_df["success_reason"].mask(
         new_success,
         reason,
         inplace=True,
@@ -219,7 +217,7 @@ def set_success(results_df: pd.DataFrame, success: pd.Series, reason: str):
 
 
 default_check_protocol = [
-    #set_all_failed,
+    # set_all_failed,
     add_absolute_error,
     add_relative_error,
     check_absolute_error,
@@ -227,10 +225,10 @@ default_check_protocol = [
 ]
 
 
-def keep_lowest_error(results_df, error='|rerr|'):
+def keep_lowest_error(results_df, error="|rerr|"):
     keep_indices = []
 
-    for dimension, df in results_df.groupby('dimension'):
+    for dimension, df in results_df.groupby("dimension"):
         # Keep best success from each dimension.
         if df["success"].any():
             keep_index = df.loc[df["success"]][error].idxmin()

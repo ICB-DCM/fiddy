@@ -1,7 +1,6 @@
 from functools import partial
 from typing import Any, Callable, Dict, List, Tuple
 
-import amici
 import numpy as np
 from amici.petab_objective import LLH, SLLH
 import petab
@@ -27,9 +26,9 @@ def transform_gradient_log10(gradient_value, parameter_value):
 
 
 transforms = {
-    'lin': transform_gradient_lin,
-    'log': transform_gradient_log,
-    'log10': transform_gradient_log10,
+    "lin": transform_gradient_lin,
+    "log": transform_gradient_log,
+    "log10": transform_gradient_log10,
 }
 
 
@@ -72,8 +71,9 @@ def simulate_petab_to_cached_functions(
         for parameter_id in parameter_ids
     ]
 
-    simulate_petab_partial = \
-        partial(simulate_petab, petab_problem=petab_problem, *args, **kwargs)
+    simulate_petab_partial = partial(
+        simulate_petab, petab_problem=petab_problem, *args, **kwargs
+    )
 
     def simulate_petab_full(point: TYPE_POINT):
         problem_parameters = dict(zip(parameter_ids, point))
@@ -90,14 +90,15 @@ def simulate_petab_to_cached_functions(
 
     def gradient(point: TYPE_POINT) -> TYPE_POINT:
         result = simulate_petab_full_cached(point)
-        sllh = np.array([
-            gradient_transformations[parameter_index](
-                gradient_value=result[SLLH][parameter_id],
-                parameter_value=point[parameter_index],
-            )
-            for parameter_index, parameter_id in enumerate(parameter_ids)
-        ])
+        sllh = np.array(
+            [
+                gradient_transformations[parameter_index](
+                    gradient_value=result[SLLH][parameter_id],
+                    parameter_value=point[parameter_index],
+                )
+                for parameter_index, parameter_id in enumerate(parameter_ids)
+            ]
+        )
         return sllh
 
     return function, gradient
-
