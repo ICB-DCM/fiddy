@@ -1,6 +1,6 @@
 from dataclasses import dataclass
 from functools import partial
-from typing import Callable, Iterable, List, Tuple
+from typing import Callable, Iterable, List, Tuple, Union
 
 import pandas as pd
 
@@ -225,7 +225,11 @@ default_check_protocol = [
 ]
 
 
-def keep_lowest_error(results_df, error="|rerr|"):
+def keep_lowest_error(
+    results_df,
+    error: str = "|rerr|",
+    inplace: bool = True,
+) -> Union[None, pd.DataFrame]:
     keep_indices = []
 
     for dimension, df in results_df.groupby("dimension"):
@@ -237,10 +241,15 @@ def keep_lowest_error(results_df, error="|rerr|"):
         else:
             keep_indices += df.index
 
-    results_df.drop(
+    minimal_results_df = results_df.drop(
         [index for index in results_df.index if index not in keep_indices],
-        inplace=True,
+        inplace=inplace,
     )
+
+    # Kept like this for readability, but simply `return minimal_results_df`
+    # should be equivalent.
+    if not inplace:
+        return minimal_results_df
 
 
 default_postprocessor_protocol = [
