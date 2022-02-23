@@ -1,7 +1,10 @@
+# FIXME currently `simplify_results_df` and `keep_lowest_error`
+#       refactor to just one method
 from dataclasses import dataclass
 from functools import partial
 from typing import Callable, Iterable, List, Tuple, Union
 
+import numpy as np
 import pandas as pd
 
 from . import quotient
@@ -12,6 +15,9 @@ from .constants import (
     GradientCheckMethod,
 )
 from .step import dstep
+
+
+DEFAULT_ATOL = float(np.finfo(np.float64).resolution)
 
 
 def gradient_check(
@@ -27,6 +33,7 @@ def gradient_check(
     # rtol: float = 1e-2,  # TODO
     check_protocol: List[Callable[[pd.DataFrame], None]] = None,
     postprocessor_protocol: List[Callable[[pd.DataFrame], None]] = None,
+    sort: bool = True,
 ) -> Tuple[bool, pd.DataFrame]:
     """Manage a gradient check.
 
@@ -61,6 +68,8 @@ def gradient_check(
             `"success_reason"` column.
         postprocessor_protocol:
             Similar to `check_protocol`, but applied after `check_protocol`.
+        sort:
+            Whether to sort the results.
 
     Returns:
         (1) Whether the gradient check passed, and (2) full results,
@@ -129,6 +138,12 @@ def gradient_check(
     simplified_results_df = simplify_results_df(results_df=results_df)
     success = simplified_results_df["success"].all()
 
+    if sort:
+        results_df.sort_values(
+            by=['dimension', 'size'],
+            inplace=True,
+        )
+
     return success, results_df
 
 
@@ -186,7 +201,7 @@ def add_absolute_error(results_df):
     )
 
 
-def check_absolute_error(results_df, tolerance: float = 1e-2):
+def check_absolute_error(results_df, tolerance: float = DEFAULT_ATOL):
     success = results_df["|aerr|"] < tolerance
     set_success(results_df, success, reason="|aerr|")
 
@@ -229,6 +244,7 @@ def keep_lowest_error(
     results_df,
     error: str = "|rerr|",
     inplace: bool = True,
+    sort: bool = True,
 ) -> Union[None, pd.DataFrame]:
     keep_indices = []
 
@@ -239,11 +255,20 @@ def keep_lowest_error(
             keep_indices.append(keep_index)
         # Include all results if there is no success.
         else:
-            keep_indices += df.index
+            keep_indices.extend(df.index)
 
     minimal_results_df = results_df.drop(
         [index for index in results_df.index if index not in keep_indices],
         inplace=inplace,
+    )
+
+    sort_df = results_df
+    if not inplace:
+        sort_df = minimal_results_df
+    sort_df.sort_values(
+        ['success', 'dimension', 'size'],
+        ascending=[False, True, True],
+        inplace=True,
     )
 
     # Kept like this for readability, but simply `return minimal_results_df`
