@@ -70,6 +70,18 @@ def central(
         step=step,
     )
 
+def hybrid(
+    function: TYPE_FUNCTION,
+    point: TYPE_POINT,
+    step: TYPE_POINT,
+):
+    """'Novel' hybrid FD check
+    
+        TODO: doc
+    """
+    difference=Difference.HYBRID
+    method = getattr(difference_methods, difference.value)
+    return method(function=function, point=point, step=step)
 
 def compute(
     difference: Difference,

@@ -28,9 +28,11 @@ class Difference(str, Enum):
     BACKWARD = "backward"
     CENTRAL = "central"
     FORWARD = "forward"
+    HYBRID = "hybrid"
 
 
 class GradientCheckMethod(str, Enum):
     BACKWARD = Difference.BACKWARD
     CENTRAL = Difference.CENTRAL
     FORWARD = Difference.FORWARD
+    HYBRID = Difference.HYBRID

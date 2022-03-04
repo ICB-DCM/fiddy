@@ -42,6 +42,16 @@ def backward(
     """
     return function(point) - function(point - step)
 
+def hybrid(
+    function: TYPE_FUNCTION,
+    point: TYPE_POINT,
+    step: TYPE_POINT
+):
+    fd_f = forward(function, point, step)
+    fd_b = backward(function, point, step)
+    fd_c = central(function, point, step)
+    # TODO: Implement new gradient check (i.e. carry over from pyPESTO)
+    raise NotImplementedError
 
 def central(
     function: TYPE_FUNCTION,

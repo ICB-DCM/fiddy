@@ -98,6 +98,10 @@ def gradient_check(
         fd_gradient_callable = partial(
             quotient.central, function=function, point=point
         )
+    elif fd_gradient_method == "hybrid":
+        fd_gradient_callable = partial(
+            quotient.hybrid, function=function, point=point
+        )
     else:
         raise NotImplementedError(f"Method: {fd_gradient_method}")
 

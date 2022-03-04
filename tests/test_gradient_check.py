@@ -84,12 +84,21 @@ def test_gradient_check(case1):
         gradient=case1["gradient"],
         sizes=sizes,
         fd_gradient_method="central",
+    )  
+    success_hybrid, results_df_central = fiddy.gradient_check(
+        function=case1["function"],
+        point=point,
+        gradient=case1["gradient"],
+        sizes=sizes,
+        fd_gradient_method="hybrid",
     )
-
+ 
     # All gradient checks were successful.
     assert success_forward
     assert success_backward
-    assert success_central
+    assert success_central 
+    # Test should intentionally fail, after implementation test should succeed
+    assert success_hybrid
 
     simplified_results_df_forward = simplify_results_df(results_df_forward)
     simplified_results_df_backward = simplify_results_df(results_df_backward)
