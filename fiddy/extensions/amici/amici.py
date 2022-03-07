@@ -1,10 +1,16 @@
 from functools import partial
+from inspect import signature
 from typing import Any, Callable, Dict, List, Tuple
 
 import numpy as np
-from amici.petab_objective import LLH, SLLH
+from amici.petab_objective import (
+    LLH,
+    SLLH,
+    create_edatas,
+    create_parameter_mapping,
+)
 import petab
-from petab.C import PARAMETER_SCALE
+from petab.C import PARAMETER_SCALE, LIN, LOG, LOG10
 
 from ...constants import TYPE_FUNCTION, TYPE_POINT
 from ...function import CachedFunction
@@ -13,31 +19,34 @@ from ...function import CachedFunction
 LOG_E_10 = np.log(10)
 
 
-def transform_gradient_lin(gradient_value, parameter_value):
+def transform_gradient_lin_to_lin(gradient_value, parameter_value):
     return gradient_value
 
 
-def transform_gradient_log(gradient_value, parameter_value):
-    return gradient_value / parameter_value
+def transform_gradient_lin_to_log(gradient_value, parameter_value):
+    return gradient_value * parameter_value
 
 
-def transform_gradient_log10(gradient_value, parameter_value):
-    return gradient_value / (parameter_value * LOG_E_10)
+def transform_gradient_lin_to_log10(gradient_value, parameter_value):
+    return gradient_value * (parameter_value * LOG_E_10)
 
 
 transforms = {
-    "lin": transform_gradient_lin,
-    "log": transform_gradient_log,
-    "log10": transform_gradient_log10,
+    LIN:   transform_gradient_lin_to_lin,
+    LOG:   transform_gradient_lin_to_log,
+    LOG10: transform_gradient_lin_to_log10,
 }
 
 
 def simulate_petab_to_cached_functions(
     simulate_petab: Callable[[Any], Dict[str, Any]],
     petab_problem: petab.Problem,
+    *args,
     parameter_ids: List[str] = None,
     cache: bool = True,
-    *args,
+    precreate_edatas: bool = True,
+    precreate_parameter_mapping: bool = True,
+    scaled_gradients: bool = True,
     **kwargs,
 ) -> Tuple[TYPE_FUNCTION, TYPE_FUNCTION]:
     r"""Convert AMICI output to compatible gradient check functions.
@@ -54,6 +63,16 @@ def simulate_petab_to_cached_functions(
             be supplied. Defaults to `petab_problem.parameter_df.index`.
         petab_problem:
             The PEtab problem.
+        cache:
+            Whether to cache the function call.
+        precreate_edatas:
+            Whether to create the AMICI measurements object in advance, to save
+            time.
+        precreate_parameter_mapping:
+            Whether to create the AMICI parameter mapping object in advance, to
+            save time.
+        scaled_gradients:
+            Whether to return gradients on the scale of the parameters.
         \*args, \*\*kwargs:
             Passed to `simulate_petab`.
 
@@ -64,15 +83,66 @@ def simulate_petab_to_cached_functions(
     """
     if parameter_ids is None:
         parameter_ids = list(petab_problem.parameter_df.index)
-    gradient_transformations = [
-        transforms[
-            petab_problem.parameter_df.loc[parameter_id, PARAMETER_SCALE]
+    if scaled_gradients:
+        gradient_transformations = [
+            transforms[
+                petab_problem.parameter_df.loc[parameter_id, PARAMETER_SCALE]
+            ]
+            for parameter_id in parameter_ids
         ]
-        for parameter_id in parameter_ids
-    ]
+    else:
+        gradient_transformations = [transforms[LIN] for _ in parameter_ids]
+
+    edatas = None
+    if precreate_edatas:
+        if 'amici_model' not in kwargs:
+            raise ValueError(
+                'Please supply the AMICI model to precreate ExpData.'
+            )
+        edatas = create_edatas(
+            amici_model=kwargs['amici_model'],
+            petab_problem=petab_problem,
+            simulation_conditions=\
+                petab_problem.get_simulation_conditions_from_measurement_df(),
+        )
+
+    parameter_mapping = None
+    if precreate_parameter_mapping:
+        if 'amici_model' not in kwargs:
+            raise ValueError(
+                'Please supply the AMICI model to precreate ExpData.'
+            )
+        parameter_mapping = create_parameter_mapping(
+            petab_problem=petab_problem,
+            simulation_conditions=\
+                petab_problem.get_simulation_conditions_from_measurement_df(),
+            scaled_parameters=kwargs.get(
+                'scaled_parameters',
+                (
+                    signature(simulate_petab)
+                    .parameters['scaled_parameters']
+                    .default
+                ),
+            ),
+            amici_model=kwargs['amici_model'],
+        )
+
+    precreated_kwargs = {
+        'edatas': edatas,
+        'parameter_mapping': parameter_mapping,
+        'petab_problem': petab_problem,
+    }
+    precreated_kwargs = {
+        k: v
+        for k, v in precreated_kwargs.items()
+        if v is not None
+    }
 
     simulate_petab_partial = partial(
-        simulate_petab, petab_problem=petab_problem, *args, **kwargs
+        simulate_petab,
+        *args,
+        **precreated_kwargs,
+        **kwargs,
     )
 
     def simulate_petab_full(point: TYPE_POINT):

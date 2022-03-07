@@ -63,6 +63,9 @@ setup(
             "sympy",
             "more-itertools",
         ],
+        "examples": [
+            "notebook",
+        ]
         "amici": [
             "amici",
             "petab",

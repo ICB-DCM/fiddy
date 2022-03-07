@@ -3,8 +3,7 @@ import shutil
 
 import joblib
 
-from .constants import TYPE_FUNCTION, TYPE_POINT, TYPE_OUTPUT
-
+from .constants import Type
 
 default_memory_kwargs = {
     "location": "cache_fiddy",
@@ -18,7 +17,7 @@ class Function:
 
     def __init__(
         self,
-        function: TYPE_FUNCTION,
+        function: Type.FUNCTION,
     ):
         """Construct a cached function.
 
@@ -30,7 +29,7 @@ class Function:
         """
         self.function = function
 
-    def __call__(self, point: TYPE_POINT) -> TYPE_OUTPUT:
+    def __call__(self, point: Type.POINT) -> Type.SCALAR:
         return self.function(point)
 
 
@@ -49,7 +48,7 @@ class CachedFunction(Function):
 
     def __init__(
         self,
-        function: TYPE_FUNCTION,
+        function: Type.FUNCTION,
         ram_cache: bool = False,
         **kwargs,
     ):

@@ -3,37 +3,46 @@
 import numpy as np
 
 from .constants import (
-    TYPE_DIMENSION,
-    TYPE_POINT,
+    #TYPE_DIMENSION,
+    #TYPE_POINT,
+    Type,
 )
 
 
-def dstep(
-    point: TYPE_POINT,
-    dimension: TYPE_DIMENSION,
-    size: float,
-) -> TYPE_POINT:
-    """Generate a step from a step size and a single dimension to step along.
 
-    Args:
-        point:
-            The point to step from.
-        dimension:
-            The dimension to step along.
-        size:
-            The size of the step.
+def step(
+    direction: Type.DIRECTION,
+    size: Type.SIZE,
+):
+    return direction * size / np.linalg.norm(direction)
 
-    Returns:
-        The step, that can be added to the point.
-    """
-    # return one_hot_array(
-    #     shape=point.shape,
-    #     index=dimension,
-    #     value=size,
-    # )
-    array = np.zeros(point.shape)
-    array[dimension] = size
-    return array
+
+# def dstep(
+#     point: TYPE_POINT,
+#     dimension: TYPE_DIMENSION,
+#     size: float,
+# ) -> TYPE_POINT:
+#     """Generate a step from a step size and a single dimension to step along.
+# 
+#     Args:
+#         point:
+#             The point to step from.
+#         dimension:
+#             The dimension to step along.
+#         size:
+#             The size of the step.
+# 
+#     Returns:
+#         The step, that can be added to the point.
+#     """
+#     # return one_hot_array(
+#     #     shape=point.shape,
+#     #     index=dimension,
+#     #     value=size,
+#     # )
+#     array = np.zeros(point.shape)
+#     array[dimension] = size
+#     return array
 
 
 # def ndstep(
