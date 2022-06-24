@@ -65,7 +65,7 @@ setup(
         ],
         "examples": [
             "notebook",
-        ]
+        ],
         "amici": [
             "amici",
             "petab",
