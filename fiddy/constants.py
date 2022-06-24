@@ -7,9 +7,7 @@ from numpy.typing import NDArray
 
 __all__ = [
     "Type",
-    "Difference",
     "MethodId",
-    "GradientCheckMethod",
 ]
 
 
@@ -17,16 +15,18 @@ class Type:
     # The size is applied as the Euclidean distance in the
     # specified direction, between the point and the stepped point
     SCALAR = np.float64
-    DIRECTION = NDArray[SCALAR]
+    ARRAY = NDArray[SCALAR]
+    DIRECTION = ARRAY
     SIZE = SCALAR  # strictly positive TODO enforce?
-    POINT = NDArray[SCALAR]
-    DIRECTIONAL_DERIVATIVE = SCALAR
+    POINT = ARRAY
+    DIRECTIONAL_DERIVATIVE = ARRAY
     DERIVATIVE = NDArray[DIRECTIONAL_DERIVATIVE]
     # Currently only supports scalar-valued functions with
     # vector input of arbitrary dimension
-    FUNCTION = Callable[[POINT], SCALAR]
+    FUNCTION_OUTPUT = ARRAY
+    FUNCTION = Callable[[POINT], FUNCTION_OUTPUT]
     DERIVATIVE_FUNCTION = Callable[[POINT], DERIVATIVE]
-    DIRECTIONAL_DERIVATIVE_FUNCTION = Callable[[POINT], SCALAR]
+    DIRECTIONAL_DERIVATIVE_FUNCTION = Callable[[POINT], DIRECTIONAL_DERIVATIVE]
     # TODO rename analysis and success to e.g.
     #      - "ANALYSE_DIRECTIONAL_DERIVATIVE_METHOD" and
     #      - "ANALYSE_DERIVATIVE_METHOD" and
@@ -35,6 +35,7 @@ class Type:
 
 
 # FIXME rename, since this can be the name of the base class in `derivative.py`
+# FIXME use Difference instead, then i.e. Extrapolation too
 class MethodId(str, Enum):
     BACKWARD = "backward"
     CENTRAL = "central"
@@ -45,19 +46,19 @@ class MethodId(str, Enum):
     #      e.g. for higher-order derivatives?
 
 
-class Difference(str, Enum):
-    BACKWARD = MethodId.BACKWARD
-    CENTRAL = MethodId.CENTRAL
-    FORWARD = MethodId.FORWARD
+#class Difference(str, Enum):
+#    BACKWARD = MethodId.BACKWARD
+#    CENTRAL = MethodId.CENTRAL
+#    FORWARD = MethodId.FORWARD
 
 
-# necessary? same as MethodId?
-class GradientCheckMethod(str, Enum):
-    BACKWARD = Difference.BACKWARD
-    CENTRAL = Difference.CENTRAL
-    FORWARD = Difference.FORWARD
+## necessary? same as MethodId?
+#class GradientCheckMethod(str, Enum):
+#    BACKWARD = Difference.BACKWARD
+#    CENTRAL = Difference.CENTRAL
+#    FORWARD = Difference.FORWARD
 
 
-class AnalysisMethod(str, Enum):
-    ABSOLUTE_ERROR = "absolute_error"
-    RELATIVE_ERROR = "relative_error"
+#class AnalysisMethod(str, Enum):
+#    ABSOLUTE_ERROR = "absolute_error"
+#    RELATIVE_ERROR = "relative_error"

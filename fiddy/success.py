@@ -38,6 +38,7 @@ class Consistency(Success):
         analysis_parser: Callable[["Analysis"], Union[float, None]] = None,
         rtol: float = 0.2,
         atol: float = 1e-15,
+        equal_nan: bool = True,
     ):
         super().__init__()
         if computer_parser is None:
@@ -49,6 +50,7 @@ class Consistency(Success):
 
         self.rtol = rtol
         self.atol = atol
+        self.equal_nan = equal_nan
 
     def method(self, directional_derivative: DirectionalDerivative) -> [bool, float]:
         # FIXME string literals
@@ -68,7 +70,7 @@ class Consistency(Success):
         success_by_size = {}
         for size, results in results_by_size.items():
             values = list(results.values())
-            success_by_size[size] = np.isclose(values, values[0], rtol=self.rtol, atol=self.atol).all()
+            success_by_size[size] = np.isclose(values, values[0], rtol=self.rtol, atol=self.atol, equal_nan=self.equal_nan).all()
 
         consistent_results = [
             value
@@ -77,9 +79,9 @@ class Consistency(Success):
             if success
         ]
 
-        success = np.isclose(consistent_results, consistent_results[0], rtol=self.rtol, atol=self.atol).all()
-
-        #success = np.isclose
-        value = np.average(consistent_results)
+        success = False
+        if consistent_results:
+            success = np.isclose(consistent_results, consistent_results[0], rtol=self.rtol, atol=self.atol, equal_nan=self.equal_nan).all()
+        value = np.average(np.array(consistent_results), axis=0)
 
         return success, value

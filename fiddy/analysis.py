@@ -2,6 +2,7 @@ import abc
 from typing import Any, List, Dict
 from dataclasses import dataclass, field
 
+import numpy as np
 
 from .constants import Type, MethodId
 from .derivative import DirectionalDerivative
@@ -45,7 +46,7 @@ class ApproximateCentral(Analysis):
     #            return computer
     #    return None
 
-    def method(self, directional_derivative: DirectionalDerivative) -> List[Type.DIRECTIONAL_DERIVATIVE]:
+    def method(self, directional_derivative: DirectionalDerivative) -> None:
         computer_results = directional_derivative.get_computer_results()
 
         results = {
@@ -77,3 +78,31 @@ class ApproximateCentral(Analysis):
                 metadata={'size': size}
             )
             self.results.append(result)
+
+class TransformByDirectionScale(Analysis):
+    """Transform derivatives by applying a transformation to their directions."""
+    LOG_E_10 = np.log(10)
+    only_at_completion: bool = True
+
+    def __init__(self, scales: Dict[str, str]):
+        self.scales = scales
+        super().__init__()
+
+    def transform(self, value: Type.DIRECTIONAL_DERIVATIVE, scale: str, position: Type.SCALAR):
+        if scale in ['lin', 'linear']:
+            return value
+        elif scale in ['log']:
+            return value * position
+        elif scale in ['log10']:
+            return value * position * self.LOG_E_10
+        raise NotImplementedError('The requested scale: {scale}')
+
+    def method(self, directional_derivative: DirectionalDerivative) -> None:
+        scale = self.scales[directional_derivative.id]
+        for computer in directional_derivative.computers:
+            for result in computer.results:
+                result.value = self.transform(
+                    value=result.value,
+                    scale=scale,
+                    position=computer.point.dot(computer.direction),
+                )

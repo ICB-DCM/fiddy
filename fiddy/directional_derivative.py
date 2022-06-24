@@ -6,7 +6,6 @@ import pandas as pd
 
 from .constants import (
     MethodId,
-    AnalysisMethod,
     Type,
 )
 
@@ -107,6 +106,7 @@ class ExpectedDirectionalDerivative(Computer):
 class DirectionalDerivative:
     # Each gradient result should have a unique method+step combination.
     id: str
+    direction: Type.DIRECTION
     # FIXME rename to just computers
     pending_computers: List[Computer]
     computers: List[Computer]

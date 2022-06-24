@@ -12,8 +12,15 @@ import petab
 import pytest
 
 import fiddy
+from fiddy import get_derivative, MethodId, Type
+from fiddy.analysis import TransformByDirectionScale
+from fiddy.success import Consistency
+from fiddy.derivative_check import NumpyIsCloseDerivativeCheck
 from fiddy.extensions.amici import (
+    run_amici_simulation_to_cached_functions,
     simulate_petab_to_cached_functions,
+    reshape,
+    flatten,
 )
 
 
@@ -32,7 +39,7 @@ def lotka_volterra() -> petab.Problem:
             / "problem.yaml"
         )
     )
-    point = np.array([2, 3])
+    point = np.array([2, 3], dtype=Type.SCALAR)
     return petab_problem, point
 
 
@@ -46,8 +53,65 @@ def simple() -> petab.Problem:
             / "problem.yaml"
         )
     )
-    point = np.array([1])
+    point = np.array([1], dtype=Type.SCALAR)
     return petab_problem, point
+
+
+
+@pytest.mark.parametrize("problem_generator", [simple, lotka_volterra])
+def test_run_amici_simulation_to_functions(problem_generator):
+    petab_problem, point = problem_generator()
+    timepoints = sorted(set(petab_problem.measurement_df.time))
+    amici_model = amici.petab_import.import_petab_problem(petab_problem)
+    amici_model.setTimepoints(timepoints)
+    amici_solver = amici_model.getSolver()
+
+    amici_solver.setSensitivityOrder(amici.SensitivityOrder_first)
+
+    parameter_ids = list(petab_problem.parameter_df[petab_problem.parameter_df.estimate == 1].index)
+
+    (
+        amici_function,
+        amici_derivative,
+        structures,
+    ) = run_amici_simulation_to_cached_functions(
+        parameter_ids=parameter_ids,
+        petab_problem=petab_problem,
+        amici_model=amici_model,
+        amici_solver=amici_solver,
+    )
+
+    #f = amici_function(point)
+    #d = amici_derivative(point)
+    #breakpoint()
+    #expected_derivative = amici_derivative(point)
+
+    #parameter_ids = list(petab_problem.parameter_df[petab_problem.parameter_df.estimate == 1].index)
+    #parameter_scales = dict(petab_problem.parameter_df[petab_problem.parameter_df.estimate == 1].parameterScale)
+
+    derivative = get_derivative(
+        function=amici_function,
+        point=point,
+        sizes=[1e-10, 1e-5],
+        direction_ids=parameter_ids,
+        method_ids=[MethodId.FORWARD, MethodId.BACKWARD, MethodId.CENTRAL],
+        #analysis_classes=[],
+        #analysis_classes=[
+        #    lambda: TransformByDirectionScale(scales=parameter_scales),
+        #],
+        success_checker=Consistency(),
+    )
+    test_value = derivative.value
+    #expected_value = expected_derivative_function(point)
+    breakpoint()
+
+    check = NumpyIsCloseDerivativeCheck(
+        derivative=derivative,
+        expectation=expected_derivative,
+        point=point,
+    )
+    result = check()
+    assert result.success
 
 
 @pytest.mark.parametrize("problem_generator", [simple, lotka_volterra])
@@ -58,17 +122,42 @@ def test_simulate_petab_to_functions(problem_generator):
 
     amici_solver.setSensitivityOrder(amici.SensitivityOrder_first)
 
-    function, gradient = simulate_petab_to_cached_functions(
-        simulate_petab=amici.petab_objective.simulate_petab,
+    amici_function, amici_derivative = simulate_petab_to_cached_functions(
         parameter_ids=petab_problem.parameter_df.index,
         petab_problem=petab_problem,
         amici_model=amici_model,
         solver=amici_solver,
     )
 
-    expected_gradient = gradient(point)
+    expected_derivative = amici_derivative(point)
 
-    gradient_check_partial = partial(
+    parameter_ids = list(petab_problem.parameter_df[petab_problem.parameter_df.estimate == 1].index)
+    parameter_scales = dict(petab_problem.parameter_df[petab_problem.parameter_df.estimate == 1].parameterScale)
+
+    derivative = get_derivative(
+        function=amici_function,
+        point=point,
+        sizes=[1e-10, 1e-5],
+        direction_ids=parameter_ids,
+        method_ids=[MethodId.FORWARD, MethodId.BACKWARD, MethodId.CENTRAL],
+        analysis_classes=[
+            lambda: TransformByDirectionScale(scales=parameter_scales),
+        ],
+        success_checker=Consistency(),
+    )
+    test_value = derivative.value
+    #expected_value = expected_derivative_function(point)
+
+    check = NumpyIsCloseDerivativeCheck(
+        derivative=derivative,
+        expectation=expected_derivative,
+        point=point,
+    )
+    result = check()
+    assert result.success
+
+    """
+    derivative_check_partial = partial(
         fiddy.gradient_check,
         function=function,
         point=point,
@@ -175,3 +264,4 @@ def test_simulate_petab_to_functions(problem_generator):
                     > 5
                     * results_df_central.iloc[best_test_index_central][error]
                 )
+    """

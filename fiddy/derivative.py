@@ -7,13 +7,7 @@ import numpy as np
 import pandas as pd
 
 from .constants import (
-    #TYPE_DIMENSION,
-    #TYPE_FUNCTION,
-    #TYPE_SIZE,
-    #TYPE_OUTPUT,
-    #TYPE_GRADIENT_FUNCTION,
     MethodId,
-    AnalysisMethod,
     Type,
 )
 
@@ -97,7 +91,7 @@ class ExpectedDirectionalDerivative(Computer):
 @dataclass
 class Analysis:
     # Change to callable?
-    method: AnalysisMethod
+    method: Type.ANALYSIS_METHOD
     result: Any
 
     def __call__(self, directional_derivative):
@@ -233,8 +227,8 @@ class Derivative:
         return dict(self.series)
 
     @property
-    def values(self):
-        return self.series.values
+    def value(self):
+        return np.stack(self.series.values, axis=-1)
 
     @property
     def df(self):
@@ -267,9 +261,9 @@ def get_derivative(
     # TODO for gradient check; add support for methods
     # TODO add some default consistency check
     # TODO change to class that can be initialized with.. directional_derivative object?
-    analysis_classes: List[Analysis],
     success_checker: Success,
     *args,
+    analysis_classes: List[Analysis] = None,
     directions: Union[List[Type.DIRECTION], Dict[str, Type.DIRECTION]] = None,
     direction_ids: List[str] = None,
     direction_indices: List[int] = None,
@@ -296,6 +290,8 @@ def get_derivative(
     )
     if custom_methods is None:
         custom_methods = {}
+    if analysis_classes is None:
+        analysis_classes = []
     directional_derivatives = []
     for direction_id, direction in zip(direction_ids, directions):
         computers = []
@@ -323,6 +319,7 @@ def get_derivative(
                 computers.append(computer)
         directional_derivative = DirectionalDerivative(
             id=direction_id,
+            direction=direction,
             pending_computers=computers,
             # TODO support users supplying previously run computers?
             computers=[],

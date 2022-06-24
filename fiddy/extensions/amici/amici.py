@@ -1,19 +1,23 @@
 from functools import partial
 from inspect import signature
-from typing import Any, Callable, Dict, List, Tuple
+from typing import Any, Callable, Dict, List, Tuple, Union
 
 import numpy as np
+import amici
 from amici.petab_objective import (
     LLH,
     SLLH,
+    RDATAS,
     create_edatas,
     create_parameter_mapping,
 )
+import amici.petab_objective
 import petab
 from petab.C import PARAMETER_SCALE, LIN, LOG, LOG10
 
-from ...constants import TYPE_FUNCTION, TYPE_POINT
+from ...constants import Type
 from ...function import CachedFunction
+from ...numpy import fiddy_array
 
 
 LOG_E_10 = np.log(10)
@@ -38,18 +42,257 @@ transforms = {
 }
 
 
+all_rdata_derivatives = {
+    'x'     : 'sx',
+    'x0'    : 'sx0',
+    'x_ss'  : 'sx_ss',
+    'y'     : 'sy',
+    'sigmay': 'ssigmay',
+    'z'     : 'sz',
+    'rz'    : 'srz',
+    'sigmaz': 'ssigmaz',
+    'llh'   : 'sllh',
+    'sllh'  : 's2llh',
+    'res'   : 'sres',
+}
+
+# The dimension of the AMICI ReturnData that contains parameters.
+# Should be shifted to the last dimension to be compatible with fiddy.
+derivative_parameter_dimension = {
+    'sx'      : 1,
+    'sx0'     : 0,
+    'sx_ss'   : 0,
+    'sy'      : 1,
+    'ssigmay' : 1,
+    #'sz'      : ???,
+    'srz'     : 2,
+    #'ssigmaz' : ???,
+    'sllh'    : 0,
+    's2llh'   : 1,
+    'sres'    : 1,
+}
+
+
+def rdata_array_transpose(array: np.ndarray, variable: str) -> Tuple[int]:
+    original_parameter_dimension = derivative_parameter_dimension[variable]
+    try:
+        return np.moveaxis(array, original_parameter_dimension, -1)
+    except:
+        breakpoint()
+    return np.moveaxis(array, original_parameter_dimension, -1)
+
+
+default_derivatives = {
+    k: v
+    for k, v in all_rdata_derivatives.items()
+    if v not in ['sz', 'srz', 'ssigmaz', 's2llh']
+}
+
+
+def rdata_to_array(rdata: amici.AmiciReturnData):
+    """Convert AMICI return data to fiddy output.
+
+    Args:
+        rdata:
+            The AMICI return data.
+
+    Returns:
+        The converted return data.
+    """
+    breakpoint()
+
+
+def output_to_array(output) -> Type.FUNCTION_OUTPUT:
+    """Convert AMICI output to fiddy output.
+
+    Output is expected to be from `amici.petab_objective.simulate_petab`.
+
+    Args:
+        output:
+            The output.
+
+    Returns:
+        The converted output.
+    """
+    condition_results = [rdata_to_array(rdata) for rdata in output[RDATAS]]
+    array = np.array(condition_results)
+    breakpoint()
+
+
+def run_amici_simulation_to_cached_functions(
+    amici_model: amici.AmiciModel,
+    *args,
+    cache: bool = True,
+    output_keys: List[str] = None,
+    parameter_ids: List[str] = None,
+    amici_solver: amici.AmiciModel = None,
+    amici_edata: amici.AmiciExpData = None,
+    #run_amici_simulation: Callable[[Any], amici.AmiciReturnData] = None,
+    derivative_variables: List[str] = None,
+    **kwargs,
+):
+    """Convert `amici.runAmiciSimulation` to fiddy functions.
+
+    Args:
+        derivative_variables:
+            The variables that derivatives will be computed or approximated for. See the keys of `all_rdata_derivatives` for options.
+
+    tmp:
+        derivative_shapes = None
+        derivatives = []
+        for rdata in result['rdatas']:
+            rdata_derivatives = [np.array(rdata.get(derivative_key), dtype=Type.SCALAR) for derivative_key in output_keys.values()]
+            if derivative_shapes is None:
+                derivative_shapes = [derivative.shape for derivative in rdata_derivatives]
+            derivatives.append(rdata_derivatives)
+
+        # The shapes of output in some dimensions should be equal (not timepoints since difference conditions have different measurements)
+        assert [rdata_derivatives[index].shape == derivatives[0][index].shape for rdata_derivatives in derivatives for index in range(len(rdata_derivatives))]
+
+        # TODO (1) sum derivative values across all measurements within a condition
+        # TODO (2) then sum across all conditions
+        #grad_flat = np.ravel(dv).astype(Type.SCALAR)
+        grad_flat = np.ravel(derivatives)
+
+        def unravel_derivatives(raveled_derivatives: Type.DERIVATIVE, derivative_shapes=derivative_shapes) -> List[Type.DERIVATIVE]:
+            head = 0
+            unraveled = []
+            for shape in derivative_shapes:
+                length = np.product(shape)
+                piece = raveled_derivatives[head:head+length].reshape(shape)
+                unraveled.append(piece)
+                head += length
+            return unraveled
+
+        unraveled = unravel_derivatives(raveled_derivatives=grad_flat)
+        breakpoint()
+    """
+    if amici_solver is None:
+        amici_solver = amici_model.getSolver()
+    if parameter_ids is None:
+        parameter_ids = amici_model.getParameterIds()
+    if amici_edata is not None:
+        raise NotImplementedError('Customization of parameter values inside AMICI ExpData.')
+    chosen_derivatives = default_derivatives
+    if derivative_variables is not None:
+        chosen_derivatives = {
+            k: all_rdata_derivatives[k]
+            for k in derivative_variables
+        }
+
+    def run_amici_simulation(point: Type.POINT):
+        problem_parameters = dict(zip(parameter_ids, point))
+        amici_model.setParameterById(problem_parameters)
+        rdata = amici.runAmiciSimulation(model=amici_model, solver=amici_solver, edata=amici_edata)
+        return rdata
+
+    if cache:
+        run_amici_simulation = CachedFunction(run_amici_simulation)
+
+    def function(point: Type.POINT):
+        rdata = run_amici_simulation(point=point)
+        outputs = {
+            variable: fiddy_array(getattr(rdata, variable))
+            for variable in chosen_derivatives
+        }
+        rdata_flat = np.concatenate([output.flat for output in outputs.values()])
+        # np.concatenate([rdata.x, rdata.y])
+        return rdata_flat
+
+    def derivative(point: Type.POINT):
+        rdata = run_amici_simulation(point=point)
+        outputs = {
+            variable: rdata_array_transpose(array=fiddy_array(getattr(rdata, derivative_variable)), variable=derivative_variable)
+            for variable, derivative_variable in chosen_derivatives.items()
+        }
+        rdata_flat = np.concatenate([output.flat for output in outputs.values()])
+        return rdata_flat
+
+    #def function(point: Type.POINT):
+    #    output = simulate_petab_full_cached(point)
+    #    result = output[LLH]
+    #    return np.array(result)
+
+    #def derivative(point: Type.POINT) -> Type.POINT:
+    #    result = simulate_petab_full_cached(point)
+    #    #sllh = np.array(
+    #    #    [
+    #    #        gradient_transformations[parameter_index](
+    #    #            gradient_value=result[SLLH][parameter_id],
+    #    #            parameter_value=point[parameter_index],
+    #    #        )
+    #    #        for parameter_index, parameter_id in enumerate(parameter_ids)
+    #    #    ]
+    #    #)
+    #    sllh = np.array([result[SLLH][parameter_id] for parameter_id in parameter_ids])
+    #    return sllh
+
+    # Get structure
+    dummy_point = fiddy_array(amici_model.getParameters())
+    dummy_rdata = run_amici_simulation(point=dummy_point)
+    #dummy_function_output = function(dummy_point)
+    #dummy_derivative_output = derivative(dummy_point)
+    #structure_function = {
+    #    variable: (
+    #        fiddy_array(getattr(dummy_rdata, variable)).size,
+    #        fiddy_array(getattr(dummy_rdata, variable)).shape,
+    #    )
+    #    for variable in chosen_derivatives
+    #}
+    #structure_derivative = {
+    #    variable: (
+    #        fiddy_array(getattr(dummy_rdata, derivative_variable)).size,
+    #        fiddy_array(getattr(dummy_rdata, derivative_variable)).shape,
+    #    )
+    #    for variable, derivative_variable in chosen_derivatives.items()
+    #}
+
+    structures = {
+        'function': {variable: None for variable in chosen_derivatives},
+        'derivative': {variable: None for variable in chosen_derivatives},
+    }
+    function_position = 0
+    derivative_position = 0
+    for variable, derivative_variable in chosen_derivatives.items():
+        function_array = fiddy_array(getattr(dummy_rdata, variable))
+        derivative_array = fiddy_array(getattr(dummy_rdata, derivative_variable))
+        structures['function'][variable] = (function_position, function_position + function_array.size, function_array.shape)
+        structures['derivative'][variable] = (derivative_position, derivative_position + derivative_array.size, derivative_array.shape)
+        function_position += function_array.size
+        derivative_position += derivative_array.size
+
+    return function, derivative, structures
+
+
+# (start, stop, shape)
+TYPE_STRUCTURE = Tuple[int, int, Tuple[int, ...]]
+
+
+def flatten(arrays: Dict[str, Type.ARRAY]) -> Type.ARRAY:
+    flattened_value = np.concatenate([array.flat for array in arrays.values()])
+    return flattened_value
+
+
+def reshape(array: Type.ARRAY, structure: TYPE_STRUCTURE) -> Dict[str, Type.ARRAY]:
+    reshaped_value = {
+        variable: array[start:stop].reshape(shape)
+        for variable, (start, stop, shape) in structure.items()
+    }
+    return reshaped_value
+
+
 def simulate_petab_to_cached_functions(
-    simulate_petab: Callable[[Any], Dict[str, Any]],
     petab_problem: petab.Problem,
     *args,
     parameter_ids: List[str] = None,
     cache: bool = True,
     precreate_edatas: bool = True,
     precreate_parameter_mapping: bool = True,
-    scaled_gradients: bool = True,
+    scaled_gradients: bool = False,
+    simulate_petab: Callable[[Any], Dict[str, Any]] = None,
     **kwargs,
-) -> Tuple[TYPE_FUNCTION, TYPE_FUNCTION]:
-    r"""Convert AMICI output to compatible gradient check functions.
+) -> Tuple[Type.FUNCTION, Type.FUNCTION]:
+    r"""Convert `amici.petab_objective.simulate_petab` to fiddy functions.
 
     Note that all gradients are provided on linear scale. The correction from
     `'log10'` scale is automatically done.
@@ -83,15 +326,18 @@ def simulate_petab_to_cached_functions(
     """
     if parameter_ids is None:
         parameter_ids = list(petab_problem.parameter_df.index)
-    if scaled_gradients:
-        gradient_transformations = [
-            transforms[
-                petab_problem.parameter_df.loc[parameter_id, PARAMETER_SCALE]
-            ]
-            for parameter_id in parameter_ids
-        ]
-    else:
-        gradient_transformations = [transforms[LIN] for _ in parameter_ids]
+
+    if simulate_petab is None:
+        simulate_petab = amici.petab_objective.simulate_petab
+    #if scaled_gradients:
+    #    gradient_transformations = [
+    #        transforms[
+    #            petab_problem.parameter_df.loc[parameter_id, PARAMETER_SCALE]
+    #        ]
+    #        for parameter_id in parameter_ids
+    #    ]
+    #else:
+    #    gradient_transformations = [transforms[LIN] for _ in parameter_ids]
 
     edatas = None
     if precreate_edatas:
@@ -141,11 +387,12 @@ def simulate_petab_to_cached_functions(
     simulate_petab_partial = partial(
         simulate_petab,
         *args,
+        scaled_parameters=scaled_gradients,
         **precreated_kwargs,
         **kwargs,
     )
 
-    def simulate_petab_full(point: TYPE_POINT):
+    def simulate_petab_full(point: Type.POINT):
         problem_parameters = dict(zip(parameter_ids, point))
         result = simulate_petab_partial(problem_parameters=problem_parameters)
         return result
@@ -154,21 +401,29 @@ def simulate_petab_to_cached_functions(
     if cache:
         simulate_petab_full_cached = CachedFunction(simulate_petab_full)
 
-    def function(point: TYPE_POINT):
-        result = simulate_petab_full_cached(point)
-        return result[LLH]
+    def function(point: Type.POINT):
+        output = simulate_petab_full_cached(point)
+        result = output[LLH]
+        return np.array(result)
 
-    def gradient(point: TYPE_POINT) -> TYPE_POINT:
+    def derivative(point: Type.POINT) -> Type.POINT:
         result = simulate_petab_full_cached(point)
-        sllh = np.array(
-            [
-                gradient_transformations[parameter_index](
-                    gradient_value=result[SLLH][parameter_id],
-                    parameter_value=point[parameter_index],
-                )
-                for parameter_index, parameter_id in enumerate(parameter_ids)
-            ]
-        )
+
+        #sllh = np.array(
+        #    [
+        #        gradient_transformations[parameter_index](
+        #            gradient_value=result[SLLH][parameter_id],
+        #            parameter_value=point[parameter_index],
+        #        )
+        #        for parameter_index, parameter_id in enumerate(parameter_ids)
+        #    ]
+        #)
+        sllh = np.array([result[SLLH][parameter_id] for parameter_id in parameter_ids])
         return sllh
 
-    return function, gradient
+    return function, derivative
+
+
+#class SplitAmiciReturnData(Analysis):
+#    """Split AMICI output into multiple outputs (e.g. state variables `x` and observable variables `y`)."""
+#    pass

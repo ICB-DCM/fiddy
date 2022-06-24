@@ -29,7 +29,7 @@ class Function:
         """
         self.function = function
 
-    def __call__(self, point: Type.POINT) -> Type.SCALAR:
+    def __call__(self, point: Type.POINT) -> Type.FUNCTION_OUTPUT:
         return self.function(point)
 
 

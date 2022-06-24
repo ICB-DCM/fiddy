@@ -1,4 +1,5 @@
 import pytest
+from functools import partial
 
 from more_itertools import one
 import numpy as np
@@ -9,26 +10,47 @@ from fiddy import MethodId, get_derivative, methods
 from fiddy.derivative import Computer
 from fiddy.analysis import ApproximateCentral
 from fiddy.success import Consistency
+from fiddy.derivative_check import NumpyIsCloseDerivativeCheck
 
 
 RTOL = 1e-2
 ATOL = 1e-15
 
 
+def rosenbrock(input_value, output_shape):
+    size = np.product(output_shape)
+    values = [rosen(input_value + i*0.01) for i in range(size)]
+    output = np.array(values).reshape(output_shape)
+    return output
+
+
+def rosenbrock_der(input_value, output_shape):
+    size = np.product(output_shape)
+    input_shape = input_value.shape
+    values = [rosen_der(input_value + i*0.01) for i in range(size)]
+    # The input shape is the "deepest" dimension(s), i.e. expect
+    # that a single input-value-dimensional-point in the output space
+    # of the derivative function is the derivative vector for the
+    # output value at this point in function output space, w.r.t. all
+    # parameters.
+    output = np.array(values).reshape(output_shape + input_shape)
+    return output
+
+
 @pytest.mark.parametrize("point, direction, method", [
     (np.array(point), np.array(direction), method)
     for point in [
-        [1, 0],
-        [0, 1],
-        [1, 0.5],
-        [-0.5, 0.25],
+        (1, 0),
+        (0, 1),
+        (1, 0.5),
+        (-0.5, 0.25),
     ]
     for direction in [
-        [1, 0],
-        [1, 1],
-        [0, 1],
-        [0, 0.001],
-        [0.5, -0.5],
+        (1, 0),
+        (1, 1),
+        (0, 1),
+        (0, 0.001),
+        (0.5, -0.5),
     ]
     for method in methods
 ])
@@ -50,11 +72,26 @@ def test_default_directional_derivative_results(point, direction, method, size=1
     assert np.isclose(test_value, expected_value, rtol=RTOL, atol=ATOL)
 
 
-def test_get_derivative():
-    point = np.array([1,0,0])
-    sizes = [1e-10, 1e-5]
+@pytest.mark.parametrize("point, sizes, output_shape", [
+    (np.array(point), sizes, output_shape)
+    for point in [
+        (1, 0, 0),
+        (0.9, 0.1, 0.2, .4),
+    ]
+    for sizes in [
+        [1e-10, 1e-5],
+    ]
+    for output_shape in [
+        (1,),
+        (1,2),
+        (5,3,6,2,4),
+    ]
+])
+def test_get_derivative(point, sizes, output_shape):
+    function = partial(rosenbrock, output_shape=output_shape)
+    expected_derivative_function = partial(rosenbrock_der, output_shape=output_shape)
     derivative = get_derivative(
-        function=rosen,
+        function=function,
         point=point,
         # FIXME default?
         sizes=[1e-10, 1e-5],
@@ -65,4 +102,13 @@ def test_get_derivative():
         # FIXME default? not just "True" ...
         success_checker=Consistency(),
     )
-    assert np.isclose(derivative.values, rosen_der(point)).all()
+    test_value = derivative.value
+    expected_value = expected_derivative_function(point)
+
+    check = NumpyIsCloseDerivativeCheck(
+        derivative=derivative,
+        expectation=expected_value,
+        point=point,
+    )
+    result = check()
+    assert result.success
