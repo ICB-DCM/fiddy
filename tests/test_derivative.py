@@ -110,5 +110,5 @@ def test_get_derivative(point, sizes, output_shape):
         expectation=expected_value,
         point=point,
     )
-    result = check()
+    result = check(rtol=1e-2)
     assert result.success
