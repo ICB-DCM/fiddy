@@ -1,6 +1,6 @@
 from functools import partial
 from inspect import signature
-from typing import Any, Callable, Dict, List, Tuple, Union
+from typing import Any, Callable, Dict, List, Sequence, Tuple, Union
 
 import numpy as np
 import amici
@@ -136,6 +136,8 @@ def run_amici_simulation_to_cached_functions(
     Args:
         derivative_variables:
             The variables that derivatives will be computed or approximated for. See the keys of `all_rdata_derivatives` for options.
+        parameter_ids:
+            The IDs that correspond to the values in the parameter vector that is simulated.
 
     tmp:
         derivative_shapes = None
@@ -199,13 +201,21 @@ def run_amici_simulation_to_cached_functions(
         # np.concatenate([rdata.x, rdata.y])
         return rdata_flat
 
-    def derivative(point: Type.POINT):
+    def derivative(point: Type.POINT, return_dict: bool = False):
         rdata = run_amici_simulation(point=point)
         outputs = {
             variable: rdata_array_transpose(array=fiddy_array(getattr(rdata, derivative_variable)), variable=derivative_variable)
             for variable, derivative_variable in chosen_derivatives.items()
         }
-        rdata_flat = np.concatenate([output.flat for output in outputs.values()])
+        rdata_flat = np.concatenate(
+            [
+                output_array.reshape(-1, output_array.shape[-1])
+                for output_array in outputs.values()
+            ],
+            axis=0,
+        )
+        if return_dict:
+            return outputs
         return rdata_flat
 
     #def function(point: Type.POINT):

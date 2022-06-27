@@ -5,7 +5,7 @@ from dataclasses import dataclass, field
 import numpy as np
 
 from .constants import Type, MethodId
-from .derivative import DirectionalDerivative
+from .directional_derivative import DirectionalDerivative
 
 
 @dataclass

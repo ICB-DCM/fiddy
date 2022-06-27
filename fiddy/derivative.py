@@ -11,152 +11,21 @@ from .constants import (
     Type,
 )
 
+from .analysis import Analysis
 from .directional_derivative import methods, get_directions, Computer, DirectionalDerivative
 
-from .step import step
 from .success import Success
 
 
+#@dataclass
+#class Analysis:
+#    # Change to callable?
+#    method: Type.ANALYSIS_METHOD
+#    result: Any
+#
+#    def __call__(self, directional_derivative):
+#        self.method(directional_derivative=directional_derivative)
 
-"""
-@dataclass
-class Computer:
-    point: Type.POINT
-    # FIXME need to compute directional derivative from user-supplied gradient
-    #       method
-    direction: Type.DIRECTION
-    # FIXME support callable
-    size: Type.SIZE
-    # Change to callable?
-    method: Union[Type.DIRECTIONAL_DERIVATIVE_FUNCTION, MethodId]
-    function: Type.FUNCTION
-    autorun: bool = True
-    completed: bool = False
-    value: Type.DIRECTIONAL_DERIVATIVE = None
-
-    def __post_init__(self):
-        if isinstance(self.method, MethodId):
-            self.method = methods[self.method](
-                function=self.function,
-            )
-            #self.method = get_directional_derivative_method(self.method)(
-            #    function=self.function,
-            #)
-        if self.autorun:
-            self()
-
-    def __call__(self):
-        self.value = self.method(
-            point=self.point,
-            direction=self.direction,
-            size=self.size,
-        )
-        self.completed = True
-"""
-
-
-# @dataclass
-# class ExpectedGradientResult:
-#     """
-#     Used for gradient checks and tests.
-#     Here since `MethodResult` can subclass.
-#     These expected values are user-supplied, either
-#     or by some gradient-generating method.
-#     """
-#     # FIXME simply reuse `DirectionalDerivativeResult`?
-#     point: Type.POINT
-#     # FIXME need to compute directional derivative from user-supplied gradient
-#     #       method
-#     direction: Type.DIRECTION
-#     # FIXME support callable
-#     directional_derivative: Type.GRADIENT
-
-# TODO do not inherit from computer
-#      define common base class to both?
-@dataclass
-class ExpectedDirectionalDerivative(Computer):
-    size = None
-    method = None
-    function = None
-    autorun = False
-
-    # TODO test
-    __call__ = None
-
-    def __post_init__(self):
-        if directional_derivative is None:
-            raise ValueError('Please provide an expected directional derivative result.')
-
-
-@dataclass
-class Analysis:
-    # Change to callable?
-    method: Type.ANALYSIS_METHOD
-    result: Any
-
-    def __call__(self, directional_derivative):
-        self.method(directional_derivative=directional_derivative)
-
-
-"""
-@dataclass
-class DirectionalDerivative:
-    # Each gradient result should have a unique method+step combination.
-    id: str
-    pending_computers: List[Computer]
-    computers: List[Computer]
-    analyses: List[Analysis]
-    # A method that acts on the information in the direction result,
-    # including gradient approximation values and post-processing results,
-    # to determine whether the gradient was computed successfully.
-    # TODO alternatively, can be interpreted as whether the gradient check worked.
-    success_method: Callable[["DirectionalDerivative"], bool] = lambda _: True
-    expected_result: ExpectedDirectionalDerivative = None
-    # If True, no further computations will occur in this class.
-    success: bool = False
-    value: Type.SCALAR = None
-    completed: bool = False
-    # Whether to complete as soon as the success method returns `True`.
-    fast: bool = False
-    autorun: bool = True
-
-
-    def __post_init__(self):
-        if self.autorun:
-            self()
-
-    def __call__(self):
-        while not self.completed:
-            self.iterate()
-        # TODO decide whether to do this here and/or in `run_next_computer` and `run_success_method`
-        self.completed = True
-
-    def iterate(self):
-        self.run_next_computer()
-        self.run_analyses()
-        self.run_success_method()
-
-    def run_next_computer(self):
-        try:
-            computer = self.pending_computers.pop(0)
-        except IndexError:
-            self.completed = True
-            return
-        computer()
-        self.computers.append(computer)
-
-    def run_analyses(self):
-        for analysis in self.analyses:
-            analysis(self)
-
-    def run_success_method(self):
-        self.success, value = self.success_method(self)
-        if self.success:
-            self.value = value
-            if self.fast:
-                self.completed = True
-
-"""
 
 class Derivative:
     # TODO support higher order derivatives (currently only gradient)
@@ -164,8 +33,8 @@ class Derivative:
 
     The general sequence is:
     1. define derivatives to be computed
-    2. compute derivatives (possibly with multiple different methods)
-    3. analyze derivatives (e.g. compute "consistency" between different methods)
+    2. compute derivatives (possibly with multiple methods)
+    3. analyze derivatives (e.g. compute "consistency" between multiple methods)
     4. check derivatives (e.g. ensure sufficient "consistency")
 
     Attributes:
@@ -330,24 +199,6 @@ def get_derivative(
         )
         directional_derivatives.append(directional_derivative)
 
-    #analysis_results = []
-    #for analysis in analyses:
-    #    analysis_result = AnalysisResult(
-    #        method=analysis,
-    #        result=None,
-    #    )
-    #    analysis_results.append(analysis_result)
-
-    #    #dimension_result = DimensionResult(
-    #    #    function=function,
-    #    #    gradient_results=gradient_results,
-    #    #    expected_result=List[SCALAR],
-    #    #    analysis_results=analysis_results,
-    #    #    result_method=result_method,
-    #    #    result=False,
-    #    #    completed=False,
-    #    #)
-    #    #request.append(dimension_result)
     return Derivative(
         directional_derivatives=directional_derivatives,
         autorun=True,

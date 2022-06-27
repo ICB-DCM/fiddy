@@ -107,7 +107,7 @@ class DerivativeCheck(abc.ABC):
 class NumpyIsCloseDerivativeCheck(DerivativeCheck):
     method_id = 'np.isclose'
 
-    def method(self, *args, rtol: float = 1e-2, atol: float = 1e-15, **kwargs):
+    def method(self, *args, **kwargs):
         directional_derivative_check_results = []
         success = True
         for direction_index, directional_derivative in enumerate(self.derivative.directional_derivatives):
@@ -123,8 +123,6 @@ class NumpyIsCloseDerivativeCheck(DerivativeCheck):
                 test_value,
                 expected_value,
                 *args,
-                rtol=rtol,
-                atol=atol,
                 **kwargs,
             )
 

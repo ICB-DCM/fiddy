@@ -12,6 +12,7 @@ __all__ = [
 
 
 class Type:
+    """Type annotation variables."""
     # The size is applied as the Euclidean distance in the
     # specified direction, between the point and the stepped point
     SCALAR = np.float64
@@ -37,6 +38,7 @@ class Type:
 # FIXME rename, since this can be the name of the base class in `derivative.py`
 # FIXME use Difference instead, then i.e. Extrapolation too
 class MethodId(str, Enum):
+    """Finite different method IDs."""
     BACKWARD = "backward"
     CENTRAL = "central"
     FORWARD = "forward"
@@ -44,19 +46,6 @@ class MethodId(str, Enum):
     # five point?
     # TODO separate enum for "order" of method?
     #      e.g. for higher-order derivatives?
-
-
-#class Difference(str, Enum):
-#    BACKWARD = MethodId.BACKWARD
-#    CENTRAL = MethodId.CENTRAL
-#    FORWARD = MethodId.FORWARD
-
-
-## necessary? same as MethodId?
-#class GradientCheckMethod(str, Enum):
-#    BACKWARD = Difference.BACKWARD
-#    CENTRAL = Difference.CENTRAL
-#    FORWARD = Difference.FORWARD
 
 
 #class AnalysisMethod(str, Enum):

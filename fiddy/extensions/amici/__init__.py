@@ -3,4 +3,5 @@ from .amici import (
     simulate_petab_to_cached_functions,
     reshape,
     flatten,
+    default_derivatives,
 )
