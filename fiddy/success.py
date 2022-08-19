@@ -1,5 +1,5 @@
 import abc
-from typing import Any, Callable, Union, List
+from typing import Any, Callable, Union, Tuple
 
 import numpy as np
 import math
@@ -52,7 +52,7 @@ class Consistency(Success):
         self.atol = atol
         self.equal_nan = equal_nan
 
-    def method(self, directional_derivative: DirectionalDerivative) -> List[bool, float]:
+    def method(self, directional_derivative: DirectionalDerivative) -> Tuple[bool, float]:
         # FIXME string literals
         computer_results = directional_derivative.get_computer_results()
         analysis_results = directional_derivative.get_analysis_results()
@@ -113,7 +113,7 @@ class ConsistencyNew(Success):
         self.atol = atol
         self.equal_nan = equal_nan
 
-    def method(self, directional_derivative: DirectionalDerivative) -> List[bool, float]:
+    def method(self, directional_derivative: DirectionalDerivative) -> Tuple[bool, float]:
         # FIXME string literals
         computer_results = directional_derivative.get_computer_results()
         analysis_results = directional_derivative.get_analysis_results()
@@ -133,7 +133,7 @@ class ConsistencyNew(Success):
             fds = list(results.values()) # values for all methods encountered (FD forward, backward and central (possibly calculated through analysis))
             fd_range = np.percentile(fds, [0, 100]) # range of fds
             fd_mean = np.mean(fds) # calculate mean of fd approximations
-            grad = -1 # FIXME how to get actual gradient
+            grad = results['approximate_central'] # FIXME how to get actual gradient
             abs_tol = self.atol
             rel_tol = self.rtol
             if not (fd_range[0] <= grad <= fd_range[1]):
