@@ -88,6 +88,8 @@ class Consistency(Success):
 
 
 class ConsistencyNew(Success):
+    """ Add documentation here """
+    # FIXME: Add documentation
     # FIXME string literal
     id = 'consistencynew'
     only_at_completion: bool = True
