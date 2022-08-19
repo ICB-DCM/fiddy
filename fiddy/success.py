@@ -45,7 +45,7 @@ class Consistency(Success):
             computer_parser = lambda computer, size: computer.value if computer.size == size else None
         self.computer_parser = computer_parser
         if analysis_parser is None:
-            analysis_parser = lambda analysis, size: analysis.value if analysis.size == size else None
+            analysis_parser = lambda computer, analysis: analysis.value if computer.size == size else None
         self.analysis_parser = analysis_parser
 
         self.rtol = rtol
@@ -106,7 +106,7 @@ class ConsistencyNew(Success):
             computer_parser = lambda computer, size: computer.value if computer.size == size else None
         self.computer_parser = computer_parser
         if analysis_parser is None:
-            analysis_parser = lambda analysis, size: analysis.value if analysis.size == size else None
+            analysis_parser = lambda computer, analysis: analysis.value if computer.size == size else None
         self.analysis_parser = analysis_parser
 
         self.rtol = rtol
