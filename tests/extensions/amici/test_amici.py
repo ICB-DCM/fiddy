@@ -51,12 +51,23 @@ def simple() -> petab.Problem:
 
 
 @pytest.mark.parametrize("problem_generator", [simple, lotka_volterra])
-def test_simulate_petab_to_functions(problem_generator):
+@pytest.mark.parametrize("scaled_gradients", (True, False))
+@pytest.mark.parametrize("scaled_parameters", (True, False))
+def test_simulate_petab_to_functions(problem_generator, scaled_gradients,
+                                     scaled_parameters):
     petab_problem, point = problem_generator()
     amici_model = amici.petab_import.import_petab_problem(petab_problem)
     amici_solver = amici_model.getSolver()
 
     amici_solver.setSensitivityOrder(amici.SensitivityOrder_first)
+
+    if scaled_parameters:
+        point = np.asarray(list(
+            petab_problem.scale_parameters(dict(zip(
+                petab_problem.parameter_df.index,
+                point
+            ))).values()
+        ))
 
     function, gradient = simulate_petab_to_cached_functions(
         simulate_petab=amici.petab_objective.simulate_petab,
@@ -64,6 +75,8 @@ def test_simulate_petab_to_functions(problem_generator):
         petab_problem=petab_problem,
         amici_model=amici_model,
         solver=amici_solver,
+        scaled_gradients=scaled_gradients,
+        scaled_parameters=scaled_parameters
     )
 
     expected_gradient = gradient(point)

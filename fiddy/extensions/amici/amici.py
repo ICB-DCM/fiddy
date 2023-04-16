@@ -64,9 +64,12 @@ def simulate_petab_to_cached_functions(
     """
     if parameter_ids is None:
         parameter_ids = list(petab_problem.parameter_df.index)
+
+    scaled_gradients = kwargs.get('scaled_gradients', False)
     gradient_transformations = [
         transforms[
             petab_problem.parameter_df.loc[parameter_id, PARAMETER_SCALE]
+            if not scaled_gradients else 'lin'
         ]
         for parameter_id in parameter_ids
     ]
