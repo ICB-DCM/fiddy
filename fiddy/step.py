@@ -13,7 +13,7 @@ def dstep(
     point: TYPE_POINT,
     dimension: TYPE_DIMENSION,
     size: float,
-    relative: False,
+    relative: bool = False,
 ) -> TYPE_POINT:
     """Generate a step from a step size and a single dimension to step along.
 
