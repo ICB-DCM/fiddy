@@ -13,25 +13,6 @@ from ...function import CachedFunction
 LOG_E_10 = np.log(10)
 
 
-def transform_gradient_lin(gradient_value, parameter_value):
-    return gradient_value
-
-
-def transform_gradient_log(gradient_value, parameter_value):
-    return gradient_value / parameter_value
-
-
-def transform_gradient_log10(gradient_value, parameter_value):
-    return gradient_value / (parameter_value * LOG_E_10)
-
-
-transforms = {
-    "lin": transform_gradient_lin,
-    "log": transform_gradient_log,
-    "log10": transform_gradient_log10,
-}
-
-
 def simulate_petab_to_cached_functions(
     simulate_petab: Callable[[Any], Dict[str, Any]],
     petab_problem: petab.Problem,
@@ -65,15 +46,6 @@ def simulate_petab_to_cached_functions(
     if parameter_ids is None:
         parameter_ids = list(petab_problem.parameter_df.index)
 
-    scaled_gradients = kwargs.get('scaled_gradients', False)
-    gradient_transformations = [
-        transforms[
-            petab_problem.parameter_df.loc[parameter_id, PARAMETER_SCALE]
-            if not scaled_gradients else 'lin'
-        ]
-        for parameter_id in parameter_ids
-    ]
-
     simulate_petab_partial = partial(
         simulate_petab, petab_problem=petab_problem, *args, **kwargs
     )
@@ -95,10 +67,7 @@ def simulate_petab_to_cached_functions(
         result = simulate_petab_full_cached(point)
         sllh = np.array(
             [
-                gradient_transformations[parameter_index](
-                    gradient_value=result[SLLH][parameter_id],
-                    parameter_value=point[parameter_index],
-                )
+                result[SLLH][parameter_id]
                 for parameter_index, parameter_id in enumerate(parameter_ids)
             ]
         )
