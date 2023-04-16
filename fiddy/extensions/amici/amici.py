@@ -3,6 +3,7 @@ from typing import Any, Callable, Dict, List, Tuple
 
 import numpy as np
 from amici.petab_objective import LLH, SLLH
+from amici import SensitivityOrder
 import petab
 from petab.C import PARAMETER_SCALE
 
@@ -71,25 +72,25 @@ def simulate_petab_to_cached_functions(
         for parameter_id in parameter_ids
     ]
 
+    solver = kwargs.pop('solver')
+
     simulate_petab_partial = partial(
         simulate_petab, petab_problem=petab_problem, *args, **kwargs
     )
 
-    def simulate_petab_full(point: TYPE_POINT):
+    def simulate_petab_full(point: TYPE_POINT, order: SensitivityOrder):
         problem_parameters = dict(zip(parameter_ids, point))
-        result = simulate_petab_partial(problem_parameters=problem_parameters)
+        solver.setSensitivityOrder(order)
+        result = simulate_petab_partial(problem_parameters=problem_parameters,
+                                        solver=solver)
         return result
 
-    simulate_petab_full_cached = simulate_petab_full
-    if cache:
-        simulate_petab_full_cached = CachedFunction(simulate_petab_full)
-
     def function(point: TYPE_POINT):
-        result = simulate_petab_full_cached(point)
+        result = simulate_petab_full(point, SensitivityOrder.none)
         return result[LLH]
 
     def gradient(point: TYPE_POINT) -> TYPE_POINT:
-        result = simulate_petab_full_cached(point)
+        result = simulate_petab_full(point, SensitivityOrder.first)
         sllh = np.array(
             [
                 gradient_transformations[parameter_index](
@@ -100,5 +101,9 @@ def simulate_petab_to_cached_functions(
             ]
         )
         return sllh
+
+    if cache:
+        function = CachedFunction(function)
+        gradient = CachedFunction(gradient)
 
     return function, gradient
