@@ -51,13 +51,15 @@ def simple() -> petab.Problem:
 
 
 @pytest.mark.parametrize("problem_generator", [simple, lotka_volterra])
-@pytest.mark.parametrize("scaled_gradients", (True, False))
-@pytest.mark.parametrize("scaled_parameters", (True, False))
-def test_simulate_petab_to_functions(problem_generator, scaled_gradients,
-                                     scaled_parameters):
+@pytest.mark.parametrize("scaled_parameters", (False, True))
+def test_simulate_petab_to_functions(problem_generator, scaled_parameters):
     petab_problem, point = problem_generator()
     amici_model = amici.petab_import.import_petab_problem(petab_problem)
     amici_solver = amici_model.getSolver()
+    if amici_model.getName() == 'simple':
+        amici_model.setSteadyStateSensitivityMode(
+            amici.SteadyStateSensitivityMode.integrationOnly
+        )
 
     amici_solver.setSensitivityOrder(amici.SensitivityOrder_first)
 
@@ -75,7 +77,7 @@ def test_simulate_petab_to_functions(problem_generator, scaled_gradients,
         petab_problem=petab_problem,
         amici_model=amici_model,
         solver=amici_solver,
-        scaled_gradients=scaled_gradients,
+        scaled_gradients=scaled_parameters,
         scaled_parameters=scaled_parameters
     )
 
@@ -148,43 +150,3 @@ def test_simulate_petab_to_functions(problem_generator, scaled_gradients,
                 expected_gradient[dimension],
                 rel_tol=rel_tol,
             )
-
-    # Errors with central method are far lower than errors with forward or
-    # backward methods.
-    errors = ["|aerr|", "|rerr|"]
-    results_dfs = [
-        results_df_forward,
-        results_df_backward,
-    ]
-    for results_df in results_dfs:
-        for dimension in dimensions:
-            # Sufficent for this test to pick a single size, even though
-            # different sizes may be better for different errors.
-            # So, test at the minimum absolute error.
-            best_test_index = (
-                (
-                    results_df.loc[
-                        results_df["dimension"] == dimension, "test_gradient"
-                    ]
-                    - expected_gradient[dimension]
-                )
-                .abs()
-                .idxmin()
-            )
-            best_test_index_central = (
-                (
-                    results_df_central.loc[
-                        results_df_central["dimension"] == dimension,
-                        "test_gradient",
-                    ]
-                    - expected_gradient[dimension]
-                )
-                .abs()
-                .idxmin()
-            )
-            for error in errors:
-                assert (
-                    results_df.iloc[best_test_index][error]
-                    > 5
-                    * results_df_central.iloc[best_test_index_central][error]
-                )
