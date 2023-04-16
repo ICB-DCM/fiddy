@@ -19,6 +19,7 @@ def gradient_check(
     point: TYPE_POINT,
     gradient: TYPE_FUNCTION,
     sizes: Iterable[float] = None,
+    relative_sizes = False,
     dimensions: Iterable[TYPE_DIMENSION] = None,
     stop_at_success: bool = True,
     # TODO or custom Callable
@@ -40,6 +41,9 @@ def gradient_check(
         sizes:
             The sizes of the steps to take.
             Defaults to `[1e-1, 1e-3, 1e-5, 1e-7, 1e-9]`.
+        relative_sizes:
+            If true sizes are interpreted as relative to point value,
+            otherwise as absolute.
         dimensions:
             The dimensions along which to step.
             Defaults to all dimensions of the point.
@@ -107,7 +111,8 @@ def gradient_check(
 
     for size in sizes:
         for dimension in dimensions:
-            step = dstep(point=point, dimension=dimension, size=size)
+            step = dstep(point=point, dimension=dimension, size=size,
+                         relative=relative_sizes)
             test_gradient = fd_gradient_callable(step=step)
             results.append(
                 Result(

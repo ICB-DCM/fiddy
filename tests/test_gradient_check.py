@@ -42,7 +42,8 @@ def case1():
     }
 
 
-def test_gradient_check(case1):
+@pytest.mark.parametrize("relative_sizes", [True, False])
+def test_gradient_check(case1, relative_sizes):
     point = np.array([3, 4])
     rel_tol = 1e-1
 
@@ -70,6 +71,7 @@ def test_gradient_check(case1):
         gradient=case1["gradient"],
         sizes=sizes,
         fd_gradient_method="forward",
+        relative_sizes=relative_sizes,
     )
     success_backward, results_df_backward = fiddy.gradient_check(
         function=case1["function"],
@@ -77,6 +79,7 @@ def test_gradient_check(case1):
         gradient=case1["gradient"],
         sizes=sizes,
         fd_gradient_method="backward",
+        relative_sizes=relative_sizes,
     )
     success_central, results_df_central = fiddy.gradient_check(
         function=case1["function"],
@@ -84,6 +87,7 @@ def test_gradient_check(case1):
         gradient=case1["gradient"],
         sizes=sizes,
         fd_gradient_method="central",
+        relative_sizes=relative_sizes,
     )  
     success_hybrid, results_df_central = fiddy.gradient_check(
         function=case1["function"],
@@ -91,6 +95,7 @@ def test_gradient_check(case1):
         gradient=case1["gradient"],
         sizes=sizes,
         fd_gradient_method="hybrid",
+        relative_sizes=relative_sizes,
     )
  
     # All gradient checks were successful.

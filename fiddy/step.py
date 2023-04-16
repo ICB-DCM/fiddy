@@ -1,4 +1,5 @@
 # from typing import Iterable, Tuple, Union
+import warnings
 
 import numpy as np
 
@@ -12,6 +13,7 @@ def dstep(
     point: TYPE_POINT,
     dimension: TYPE_DIMENSION,
     size: float,
+    relative: False,
 ) -> TYPE_POINT:
     """Generate a step from a step size and a single dimension to step along.
 
@@ -22,6 +24,9 @@ def dstep(
             The dimension to step along.
         size:
             The size of the step.
+        relative:
+            if True, size of step is multiplied with the value of the point
+            in the respective dimension
 
     Returns:
         The step, that can be added to the point.
@@ -31,8 +36,15 @@ def dstep(
     #     index=dimension,
     #     value=size,
     # )
+    assert dimension < point.shape[0]
     array = np.zeros(point.shape)
     array[dimension] = size
+    if relative:
+        val = point[dimension]
+        if val == 0:
+            warnings.warn(f'point is zero valued in dimension {dimension},'
+                          f'resulting in zero step.')
+        array *= val
     return array
 
 
