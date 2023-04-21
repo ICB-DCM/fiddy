@@ -46,8 +46,19 @@ class MethodId(str, Enum):
     # five point?
     # TODO separate enum for "order" of method?
     #      e.g. for higher-order derivatives?
+    HYBRID = "hybrid"
 
 
 #class AnalysisMethod(str, Enum):
 #    ABSOLUTE_ERROR = "absolute_error"
 #    RELATIVE_ERROR = "relative_error"
+#=======
+
+
+## TODO remove? redundant
+#class GradientCheckMethod(str, Enum):
+#    BACKWARD = MethodId.BACKWARD
+#    CENTRAL = MethodId.CENTRAL
+#    FORWARD = MethodId.FORWARD
+#    HYBRID = MethodId.HYBRID
+##>>>>>>> origin/main
