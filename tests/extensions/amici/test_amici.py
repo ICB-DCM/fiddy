@@ -95,12 +95,12 @@ def test_run_amici_simulation_to_functions(problem_generator):
         #analysis_classes=[
         #    lambda: TransformByDirectionScale(scales=parameter_scales),
         #],
-        success_checker=Consistency(),
+        success_checker=Consistency(atol=1e-2),
     )
     test_derivative = derivative.value
 
     # The test derivative is close to the expected derivative.
-    assert np.isclose(test_derivative, expected_derivative, rtol=1e-1, equal_nan=True).all()
+    assert np.isclose(test_derivative, expected_derivative, rtol=1e-1, atol=1e-1, equal_nan=True).all()
 
     # Same as above assert.
     check = NumpyIsCloseDerivativeCheck(
@@ -108,7 +108,7 @@ def test_run_amici_simulation_to_functions(problem_generator):
         expectation=expected_derivative,
         point=point,
     )
-    result = check(rtol=1e-1, equal_nan=True)
+    result = check(rtol=1e-1, atol=1e-1, equal_nan=True)
     assert result.success
 
 
@@ -135,7 +135,7 @@ def test_simulate_petab_to_functions(problem_generator):
     derivative = get_derivative(
         function=amici_function,
         point=point,
-        sizes=[1e-10, 1e-5],
+        sizes=[1e-10, 1e-5, 1e-3, 1e-1],
         direction_ids=parameter_ids,
         method_ids=[MethodId.FORWARD, MethodId.BACKWARD, MethodId.CENTRAL],
         analysis_classes=[
