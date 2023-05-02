@@ -62,3 +62,6 @@ class MethodId(str, Enum):
 #    FORWARD = MethodId.FORWARD
 #    HYBRID = MethodId.HYBRID
 ##>>>>>>> origin/main
+
+
+EPSILON = 1e-5

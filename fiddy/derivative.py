@@ -1,5 +1,6 @@
 import abc
 from typing import Any, Callable, Dict, List, Union
+import warnings
 
 from dataclasses import dataclass
 
@@ -9,6 +10,7 @@ import pandas as pd
 from .constants import (
     MethodId,
     Type,
+    EPSILON,
 )
 
 from .analysis import Analysis
@@ -133,6 +135,7 @@ def get_derivative(
     success_checker: Success,
     *args,
     analysis_classes: List[Analysis] = None,
+    relative_sizes: bool = False,
     directions: Union[List[Type.DIRECTION], Dict[str, Type.DIRECTION]] = None,
     direction_ids: List[str] = None,
     direction_indices: List[int] = None,
@@ -149,6 +152,8 @@ def get_derivative(
             The IDs of the directions.
         directions:
             List: The directions to step along. Dictionary: keys are direction IDs, values are directions.
+        relative_sizes:
+            If `True`, sizes are scaled by the `point`, otherwise not.
     """
     # TODO docs
     direction_ids, directions = get_directions(
@@ -184,6 +189,7 @@ def get_derivative(
                     size=size,
                     method=method,
                     autorun=False,
+                    relative_size=relative_sizes,
                 )
                 computers.append(computer)
         directional_derivative = DirectionalDerivative(
