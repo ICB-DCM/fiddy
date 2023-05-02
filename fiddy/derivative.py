@@ -156,12 +156,18 @@ def get_derivative(
             If `True`, sizes are scaled by the `point`, otherwise not.
     """
     # TODO docs
-    direction_ids, directions = get_directions(
-        point=point,
-        directions=directions,
-        ids=direction_ids,
-        indices=direction_indices,
-    )
+    if directions is not None:
+        direction_ids, directions = get_directions(
+            directions=directions,
+            ids=direction_ids,
+            indices=direction_indices,
+        )
+    else:
+        direction_ids, directions = get_directions(
+            point=point,
+            ids=direction_ids,
+            indices=direction_indices,
+        )
     if custom_methods is None:
         custom_methods = {}
     if analysis_classes is None:

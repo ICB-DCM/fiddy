@@ -60,7 +60,11 @@ class Computer:
         # TODO add some epsilon to size?
         size = np.dot(self.point, unit_direction) * self.size
         if size == 0:
-            warnings.warn(f"Point has no component in this direction. Using default small step size `fiddy.EPSILON`: {EPSILON}")
+            warnings.warn(
+                "Point has no component in this direction. "
+                "Set `Computer.relative_size=False` to avoid this. "
+                f"Using default small step size `fiddy.EPSILON`: {EPSILON}"
+            )
             size = EPSILON
         return size
 
@@ -70,7 +74,7 @@ class Computer:
             direction=self.direction,
             size=self.get_size(),
         )
-        result = ComputerResult(method_id=self.method.id, value=value, metadata={'size': self.size})
+        result = ComputerResult(method_id=self.method.id, value=value, metadata={'size': self.get_size(), 'size_absolute': self.size})
         self.results.append(result)
         self.completed = True
 
