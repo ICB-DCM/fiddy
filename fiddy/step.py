@@ -22,4 +22,4 @@ def step(
     Returns:
         The step.
     """
-    return direction * size / np.linalg.norm(direction)
+    return direction / np.linalg.norm(direction) * size

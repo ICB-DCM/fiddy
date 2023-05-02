@@ -1,5 +1,6 @@
 import abc
 from typing import Any, Callable, Dict, List, Union, Tuple
+import warnings
 
 import numpy as np
 import pandas as pd
@@ -7,6 +8,7 @@ import pandas as pd
 from .constants import (
     MethodId,
     Type,
+    EPSILON,
 )
 
 from .step import step
@@ -36,6 +38,7 @@ class Computer:
     completed: bool = False
     results: List[ComputerResult] = field(default_factory=list)
     #value: Type.DIRECTIONAL_DERIVATIVE = None
+    relative_size: bool = False
 
     def __post_init__(self):
         if isinstance(self.method, MethodId):
@@ -48,13 +51,30 @@ class Computer:
         if self.autorun:
             self()
 
+    def get_size(self):
+        if not self.relative_size:
+            return self.size
+
+        # If relative, project point onto direction as scaling factor for size
+        unit_direction = self.direction / np.linalg.norm(self.direction)
+        # TODO add some epsilon to size?
+        size = np.dot(self.point, unit_direction) * self.size
+        if size == 0:
+            warnings.warn(
+                "Point has no component in this direction. "
+                "Set `Computer.relative_size=False` to avoid this. "
+                f"Using default small step size `fiddy.EPSILON`: {EPSILON}"
+            )
+            size = EPSILON
+        return size
+
     def __call__(self):
         value = self.method(
             point=self.point,
             direction=self.direction,
-            size=self.size,
+            size=self.get_size(),
         )
-        result = ComputerResult(method_id=self.method.id, value=value, metadata={'size': self.size})
+        result = ComputerResult(method_id=self.method.id, value=value, metadata={'size': self.get_size(), 'size_absolute': self.size})
         self.results.append(result)
         self.completed = True
 

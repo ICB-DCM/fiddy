@@ -112,3 +112,64 @@ def test_get_derivative(point, sizes, output_shape):
     )
     result = check(rtol=1e-2)
     assert result.success
+
+
+def test_get_derivative_relative():
+    point = np.array((3,4,0))
+    size = 1e-1
+    output_shape = (1,)
+
+    direction = np.array([1,0,0])
+
+    directions = [direction]
+    success_checker = Consistency(atol=1e-2)
+
+    function = partial(rosenbrock, output_shape=output_shape)
+
+    # Expected finite difference derivatives
+    f_0 = function(point)
+    f_a = function(point + direction*size)
+    f_r = function(point + point*direction*size)  # cardinal direction, simplifies to this, but usually need dot product
+
+    g_a = (f_a-f_0)/size
+    g_r = (f_r-f_0)/(point*direction*size).sum()  # cardinal direction, simplifies to this, but usually need dot product
+
+    # Fiddy finite difference derivatives
+    kwargs = {
+        'function': function,
+        'point': point,
+        'sizes': [size],
+        'method_ids': [MethodId.FORWARD],
+        'directions': [direction],
+        'success_checker': success_checker,
+    }
+    fiddy_r = float(np.squeeze(get_derivative(**kwargs, relative_sizes=True).value))
+    fiddy_a = float(np.squeeze(get_derivative(**kwargs, relative_sizes=False).value))
+
+    # Relative step sizes work
+    assert np.isclose(fiddy_r, g_r)
+    assert np.isclose(fiddy_a, g_a)
+
+    # Same thing, now with non-cardinal direction
+    function = lambda x: (x[0]-2)**2 + (x[1]+3)**2
+    point = np.array([3,4])
+    direction = np.array([1,1])
+    unit_direction = direction / np.linalg.norm(direction)
+    kwargs['function'] = function
+    kwargs['directions'] = [direction]
+    kwargs['point'] = point
+
+    size_r = size * np.dot(point, unit_direction)
+
+    f_0 = function(point)
+    f_a = function(point + unit_direction * size)
+    f_r = function(point + unit_direction * size_r)
+
+    g_a = (f_a-f_0)/size
+    g_r = (f_r-f_0)/size_r
+
+    fiddy_r = float(np.squeeze(get_derivative(**kwargs, relative_sizes=True).value))
+    fiddy_a = float(np.squeeze(get_derivative(**kwargs, relative_sizes=False).value))
+
+    assert np.isclose(fiddy_r, g_r)
+    assert np.isclose(fiddy_a, g_a)
