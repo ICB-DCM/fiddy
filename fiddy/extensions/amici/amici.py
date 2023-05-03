@@ -125,7 +125,7 @@ def run_amici_simulation_to_cached_functions(
     cache: bool = True,
     output_keys: List[str] = None,
     parameter_ids: List[str] = None,
-    amici_solver: amici.AmiciModel = None,
+    amici_solver: amici.AmiciSolver = None,
     amici_edata: amici.AmiciExpData = None,
     derivative_variables: List[str] = None,
     **kwargs,
