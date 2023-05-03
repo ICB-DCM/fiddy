@@ -5,7 +5,6 @@ import numpy as np
 
 
 from .constants import Type
-#from .derivative import Derivative
 from .directional_derivative import DirectionalDerivative
 
 
