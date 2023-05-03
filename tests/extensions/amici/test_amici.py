@@ -113,18 +113,34 @@ def test_run_amici_simulation_to_functions(problem_generator):
 
 
 @pytest.mark.parametrize("problem_generator", [simple, lotka_volterra])
-def test_simulate_petab_to_functions(problem_generator):
+@pytest.mark.parametrize("scaled_parameters", (False, True))
+def test_simulate_petab_to_functions(problem_generator, scaled_parameters):
     petab_problem, point = problem_generator()
     amici_model = amici.petab_import.import_petab_problem(petab_problem)
     amici_solver = amici_model.getSolver()
 
+    if amici_model.getName() == 'simple':
+        amici_model.setSteadyStateSensitivityMode(
+            amici.SteadyStateSensitivityMode.integrationOnly
+        )
+
     amici_solver.setSensitivityOrder(amici.SensitivityOrder_first)
+
+    if scaled_parameters:
+        point = np.asarray(list(
+            petab_problem.scale_parameters(dict(zip(
+                petab_problem.parameter_df.index,
+                point,
+            ))).values()
+        ))
 
     amici_function, amici_derivative = simulate_petab_to_cached_functions(
         parameter_ids=petab_problem.parameter_df.index,
         petab_problem=petab_problem,
         amici_model=amici_model,
         solver=amici_solver,
+        scaled_gradients=scaled_parameters,
+        scaled_parameters=scaled_parameters,
     )
 
     expected_derivative = amici_derivative(point)
@@ -132,19 +148,17 @@ def test_simulate_petab_to_functions(problem_generator):
     parameter_ids = list(petab_problem.parameter_df[petab_problem.parameter_df.estimate == 1].index)
     parameter_scales = dict(petab_problem.parameter_df[petab_problem.parameter_df.estimate == 1].parameterScale)
 
+    analysis_classes = []
+
     derivative = get_derivative(
         function=amici_function,
         point=point,
         sizes=[1e-10, 1e-5, 1e-3, 1e-1],
         direction_ids=parameter_ids,
         method_ids=[MethodId.FORWARD, MethodId.BACKWARD, MethodId.CENTRAL],
-        analysis_classes=[
-            lambda: TransformByDirectionScale(scales=parameter_scales),
-        ],
         success_checker=Consistency(),
     )
     test_value = derivative.value
-    #expected_value = expected_derivative_function(point)
 
     check = NumpyIsCloseDerivativeCheck(
         derivative=derivative,
