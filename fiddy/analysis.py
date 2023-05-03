@@ -6,6 +6,7 @@ import numpy as np
 
 from .constants import Type, MethodId
 from .directional_derivative import DirectionalDerivative
+from . import directional_derivative
 
 
 @dataclass

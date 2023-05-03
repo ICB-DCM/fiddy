@@ -7,6 +7,8 @@ import numpy as np
 from .constants import Type
 from .directional_derivative import DirectionalDerivative
 
+from . import directional_derivative, analysis, derivative
+
 
 class Success:
     id: str = None
@@ -33,8 +35,8 @@ class Consistency(Success):
     only_at_completion: bool = True
     def __init__(
         self,
-        computer_parser: Callable[["Computer"], Union[float, None]] = None,
-        analysis_parser: Callable[["Analysis"], Union[float, None]] = None,
+        computer_parser: Callable[["directional_derivative.Computer"], Union[float, None]] = None,
+        analysis_parser: Callable[["analysis.Analysis"], Union[float, None]] = None,
         rtol: float = 0.2,
         atol: float = 1e-15,
         equal_nan: bool = True,

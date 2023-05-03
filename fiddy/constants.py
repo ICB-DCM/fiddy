@@ -31,8 +31,8 @@ class Type:
     # TODO rename analysis and success to e.g.
     #      - "ANALYSE_DIRECTIONAL_DERIVATIVE_METHOD" and
     #      - "ANALYSE_DERIVATIVE_METHOD" and
-    ANALYSIS_METHOD = Callable[["DirectionalDerivative"], Any]
-    SUCCESS_CHECKER = Callable[["Derivative"], Union[bool, Any]]
+    ANALYSIS_METHOD = Callable[["directional_derivative.DirectionalDerivative"], Any]
+    SUCCESS_CHECKER = Callable[["derivative.Derivative"], Union[bool, Any]]
 
 
 # FIXME rename, since this can be the name of the base class in `derivative.py`

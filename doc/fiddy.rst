@@ -5,22 +5,20 @@ Subpackages
 -----------
 
 .. toctree::
-   :maxdepth: 6
+   :maxdepth: 4
 
    fiddy.extensions
 
-Module contents
----------------
+Submodules
+----------
 
-.. automodule:: fiddy
+fiddy.analysis module
+---------------------
+
+.. automodule:: fiddy.analysis
    :members:
    :undoc-members:
    :show-inheritance:
-   :imported-members:
-   :noindex:
-
-Submodules
-----------
 
 fiddy.constants module
 ----------------------
@@ -30,10 +28,26 @@ fiddy.constants module
    :undoc-members:
    :show-inheritance:
 
-fiddy.difference module
+fiddy.derivative module
 -----------------------
 
-.. automodule:: fiddy.difference
+.. automodule:: fiddy.derivative
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+fiddy.derivative\_check module
+------------------------------
+
+.. automodule:: fiddy.derivative_check
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+fiddy.directional\_derivative module
+------------------------------------
+
+.. automodule:: fiddy.directional_derivative
    :members:
    :undoc-members:
    :show-inheritance:
@@ -46,26 +60,10 @@ fiddy.function module
    :undoc-members:
    :show-inheritance:
 
-fiddy.gradient\_check module
-----------------------------
+fiddy.numpy module
+------------------
 
-.. automodule:: fiddy.gradient_check
-   :members:
-   :undoc-members:
-   :show-inheritance:
-
-fiddy.misc module
------------------
-
-.. automodule:: fiddy.misc
-   :members:
-   :undoc-members:
-   :show-inheritance:
-
-fiddy.quotient module
----------------------
-
-.. automodule:: fiddy.quotient
+.. automodule:: fiddy.numpy
    :members:
    :undoc-members:
    :show-inheritance:
@@ -74,6 +72,30 @@ fiddy.step module
 -----------------
 
 .. automodule:: fiddy.step
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+fiddy.success module
+--------------------
+
+.. automodule:: fiddy.success
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+fiddy.version module
+--------------------
+
+.. automodule:: fiddy.version
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+Module contents
+---------------
+
+.. automodule:: fiddy
    :members:
    :undoc-members:
    :show-inheritance:

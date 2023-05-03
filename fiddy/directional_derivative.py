@@ -13,6 +13,8 @@ from .constants import (
 
 from .step import step
 
+from . import directional_derivative
+
 from dataclasses import dataclass, field
 
 
