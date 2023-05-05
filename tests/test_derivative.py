@@ -120,7 +120,7 @@ def test_get_derivative(point, sizes, output_shape):
     test_value = derivative.value
     expected_value = expected_derivative_function(point)
 
-    check = HybridDerivativeCheck(
+    check = NumpyIsCloseDerivativeCheck(
         derivative=derivative,
         expectation=expected_value,
         point=point,
