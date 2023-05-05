@@ -1,29 +1,21 @@
 """Tests for petab_objective.py."""
 
-from functools import partial
 from pathlib import Path
 
 import amici
 import amici.petab_import
 import amici.petab_objective
-import math
 import numpy as np
 import petab
 import pytest
 
-import fiddy
-from fiddy import get_derivative, MethodId, Type
-from fiddy.analysis import TransformByDirectionScale
-from fiddy.success import Consistency
+from fiddy import MethodId, Type, get_derivative
 from fiddy.derivative_check import NumpyIsCloseDerivativeCheck
 from fiddy.extensions.amici import (
     run_amici_simulation_to_cached_functions,
     simulate_petab_to_cached_functions,
-    reshape,
-    flatten,
-    default_derivatives,
 )
-
+from fiddy.success import Consistency
 
 # Absolute and relative tolerances for finite difference gradient checks.
 ATOL: float = 1e-3
@@ -168,13 +160,11 @@ def test_simulate_petab_to_functions(problem_generator, scaled_parameters):
             petab_problem.parameter_df.estimate == 1
         ].index
     )
-    parameter_scales = dict(
-        petab_problem.parameter_df[
-            petab_problem.parameter_df.estimate == 1
-        ].parameterScale
-    )
-
-    analysis_classes = []
+    # parameter_scales = dict(
+    #     petab_problem.parameter_df[
+    #         petab_problem.parameter_df.estimate == 1
+    #     ].parameterScale
+    # )
 
     derivative = get_derivative(
         function=amici_function,
@@ -184,7 +174,6 @@ def test_simulate_petab_to_functions(problem_generator, scaled_parameters):
         method_ids=[MethodId.FORWARD, MethodId.BACKWARD, MethodId.CENTRAL],
         success_checker=Consistency(),
     )
-    test_value = derivative.value
 
     check = NumpyIsCloseDerivativeCheck(
         derivative=derivative,

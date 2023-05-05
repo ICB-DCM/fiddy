@@ -1,8 +1,8 @@
-from setuptools import setup, find_packages
+import re
 import sys
 from pathlib import Path
-import re
 
+from setuptools import find_packages, setup
 
 org = "ICB-DCM"
 repo = "fiddy"

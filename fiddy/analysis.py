@@ -1,12 +1,11 @@
 import abc
-from typing import Any, List, Dict
 from dataclasses import dataclass, field
+from typing import Any, Dict
 
 import numpy as np
 
-from .constants import Type, MethodId
+from .constants import MethodId, Type
 from .directional_derivative import DirectionalDerivative
-from . import directional_derivative
 
 
 @dataclass

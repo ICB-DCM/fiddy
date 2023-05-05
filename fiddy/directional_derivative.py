@@ -1,21 +1,13 @@
 import abc
-from typing import Any, Callable, Dict, List, Union, Tuple
 import warnings
+from dataclasses import dataclass, field
+from typing import Any, Callable, Dict, List, Tuple, Union
 
 import numpy as np
-import pandas as pd
-
-from .constants import (
-    MethodId,
-    Type,
-    EPSILON,
-)
-
-from .step import step
 
 from . import directional_derivative
-
-from dataclasses import dataclass, field
+from .constants import EPSILON, MethodId, Type
+from .step import step
 
 
 @dataclass
@@ -100,6 +92,7 @@ class Computer:
 #     direction: Type.DIRECTION
 #     # FIXME support callable
 #     directional_derivative: Type.GRADIENT
+
 
 # TODO do not inherit from computer
 #      define common base class to both?

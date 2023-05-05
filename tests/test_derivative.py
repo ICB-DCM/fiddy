@@ -1,17 +1,15 @@
-import pytest
 from functools import partial
 
-from more_itertools import one
 import numpy as np
-import pandas as pd
+import pytest
+from more_itertools import one
 from scipy.optimize import rosen, rosen_der
 
 from fiddy import MethodId, get_derivative, methods
-from fiddy.derivative import Computer
 from fiddy.analysis import ApproximateCentral
-from fiddy.success import Consistency
+from fiddy.derivative import Computer
 from fiddy.derivative_check import NumpyIsCloseDerivativeCheck
-
+from fiddy.success import Consistency
 
 RTOL = 1e-2
 ATOL = 1e-15
@@ -72,7 +70,7 @@ def test_default_directional_derivative_results(
     )
 
     test_value = one(computer.results).value
-    expected_value = rosen_der(point).dot(
+    expected_value = expected_gradient(point).dot(
         direction / np.linalg.norm(direction)
     )
 
@@ -114,7 +112,6 @@ def test_get_derivative(point, sizes, output_shape):
         # FIXME default? not just "True" ...
         success_checker=Consistency(),
     )
-    test_value = derivative.value
     expected_value = expected_derivative_function(point)
 
     check = NumpyIsCloseDerivativeCheck(
@@ -133,7 +130,6 @@ def test_get_derivative_relative():
 
     direction = np.array([1, 0, 0])
 
-    directions = [direction]
     success_checker = Consistency(atol=1e-2)
 
     function = partial(rosenbrock, output_shape=output_shape)
@@ -171,7 +167,9 @@ def test_get_derivative_relative():
     assert np.isclose(fiddy_a, g_a)
 
     # Same thing, now with non-cardinal direction
-    function = lambda x: (x[0] - 2) ** 2 + (x[1] + 3) ** 2
+    def function(x):
+        return (x[0] - 2) ** 2 + (x[1] + 3) ** 2
+
     point = np.array([3, 4])
     direction = np.array([1, 1])
     unit_direction = direction / np.linalg.norm(direction)

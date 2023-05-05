@@ -3,11 +3,9 @@ from typing import Any, Callable, Union
 
 import numpy as np
 
-
+from . import analysis, directional_derivative
 from .constants import Type
 from .directional_derivative import DirectionalDerivative
-
-from . import directional_derivative, analysis, derivative
 
 
 class Success:
@@ -50,20 +48,20 @@ class Consistency(Success):
         equal_nan: bool = True,
     ):
         super().__init__()
-        if computer_parser is None:
-            computer_parser = (
-                lambda computer, size: computer.value
-                if computer.size == size
-                else None
-            )
-        self.computer_parser = computer_parser
-        if analysis_parser is None:
-            analysis_parser = (
-                lambda analysis: analysis.value
-                if computer.size == size
-                else None
-            )
-        self.analysis_parser = analysis_parser
+        # if computer_parser is None:
+        #     computer_parser = (
+        #         lambda computer, size: computer.value
+        #         if computer.size == size
+        #         else None
+        #     )
+        # self.computer_parser = computer_parser
+        # if analysis_parser is None:
+        #     analysis_parser = (
+        #         lambda analysis: analysis.value
+        #         if computer.size == size
+        #         else None
+        #     )
+        # self.analysis_parser = analysis_parser
 
         self.rtol = rtol
         self.atol = atol

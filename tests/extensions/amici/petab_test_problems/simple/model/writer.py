@@ -2,7 +2,6 @@ from pathlib import Path
 
 import yaml2sbml
 
-
 yaml2sbml_yaml = "simple.yaml"
 petab_path = Path("..") / "petab"
 petab_yaml = "problem.yaml"

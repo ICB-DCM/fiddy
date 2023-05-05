@@ -4,7 +4,6 @@ from typing import Any, Callable, Union
 import numpy as np
 from numpy.typing import NDArray
 
-
 __all__ = [
     "Type",
     "MethodId",
@@ -32,10 +31,8 @@ class Type:
     # TODO rename analysis and success to e.g.
     #      - "ANALYSE_DIRECTIONAL_DERIVATIVE_METHOD" and
     #      - "ANALYSE_DERIVATIVE_METHOD" and
-    ANALYSIS_METHOD = Callable[
-        ["directional_derivative.DirectionalDerivative"], Any
-    ]
-    SUCCESS_CHECKER = Callable[["derivative.Derivative"], Union[bool, Any]]
+    ANALYSIS_METHOD = Callable[["DirectionalDerivative"], Any]  # noqa: F821
+    SUCCESS_CHECKER = Callable[["Derivative"], Union[bool, Any]]  # noqa: F821
 
 
 # FIXME rename, since this can be the name of the base class in `derivative.py`
@@ -48,24 +45,6 @@ class MethodId(str, Enum):
     FORWARD = "forward"
     # richardson
     # five point?
-    # TODO separate enum for "order" of method?
-    #      e.g. for higher-order derivatives?
-    HYBRID = "hybrid"
-
-
-# class AnalysisMethod(str, Enum):
-#    ABSOLUTE_ERROR = "absolute_error"
-#    RELATIVE_ERROR = "relative_error"
-# =======
-
-
-## TODO remove? redundant
-# class GradientCheckMethod(str, Enum):
-#    BACKWARD = MethodId.BACKWARD
-#    CENTRAL = MethodId.CENTRAL
-#    FORWARD = MethodId.FORWARD
-#    HYBRID = MethodId.HYBRID
-##>>>>>>> origin/main
 
 
 EPSILON = 1e-5

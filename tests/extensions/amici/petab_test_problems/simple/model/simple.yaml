@@ -3,7 +3,7 @@ odes:
       rightHandSide: parameter_k * parameter_p * parameter_p
       initialValue: 0
 
-parameters: 
+parameters:
     - parameterId: parameter_k
       nominalValue: 1
       parameterScale: lin
@@ -15,7 +15,7 @@ parameters:
       lowerBound: 0.1
       upperBound: 10
       estimate: 1
-  
+
 observables:
     - observableId: observable_x
       observableFormula: species_x
