@@ -1,11 +1,14 @@
 from setuptools import setup, find_packages
 import sys
-import os
+from pathlib import Path
 import re
 
 
 org = "ICB-DCM"
 repo = "fiddy"
+
+
+root_path = Path(__file__).resolve().parent
 
 
 def read(fname):
@@ -36,7 +39,7 @@ if sys.version_info < tuple(map(int, minimum_python_version.split("."))):
 
 # read version from file
 __version__ = ""
-version_file = os.path.join(repo, "version.py")
+version_file = root_path / repo / "version.py"
 # sets __version__
 exec(read(version_file))  # pylint: disable=W0122 # nosec
 
@@ -46,7 +49,7 @@ setup(
     name=repo,
     version=__version__,
     description="Finite difference methods.",
-    long_description=absolute_links(read("README.md")),
+    long_description=absolute_links(read(root_path / "README.md")),
     long_description_content_type="text/markdown",
     url=f"https://github.com/{org}/{repo}",
     packages=find_packages(exclude=["doc*", "test*"]),
@@ -62,6 +65,9 @@ setup(
             "pytest",
             "sympy",
             "more-itertools",
+        ],
+        "examples": [
+            "notebook",
         ],
         "amici": [
             "amici",
