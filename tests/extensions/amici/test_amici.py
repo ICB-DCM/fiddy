@@ -58,7 +58,6 @@ def simple() -> petab.Problem:
     return petab_problem, point
 
 
-
 @pytest.mark.parametrize("problem_generator", [simple, lotka_volterra])
 def test_run_amici_simulation_to_functions(problem_generator):
     petab_problem, point = problem_generator()
@@ -69,8 +68,15 @@ def test_run_amici_simulation_to_functions(problem_generator):
 
     amici_solver.setSensitivityOrder(amici.SensitivityOrder_first)
 
-    parameter_ids = list(petab_problem.parameter_df[petab_problem.parameter_df.estimate == 1].index)
-    parameter_indices = [amici_model.getParameterIds().index(parameter_id) for parameter_id in parameter_ids]
+    parameter_ids = list(
+        petab_problem.parameter_df[
+            petab_problem.parameter_df.estimate == 1
+        ].index
+    )
+    parameter_indices = [
+        amici_model.getParameterIds().index(parameter_id)
+        for parameter_id in parameter_ids
+    ]
 
     (
         amici_function,
@@ -91,16 +97,22 @@ def test_run_amici_simulation_to_functions(problem_generator):
         sizes=[1e-10, 1e-5],
         direction_ids=parameter_ids,
         method_ids=[MethodId.FORWARD, MethodId.BACKWARD, MethodId.CENTRAL],
-        #analysis_classes=[],
-        #analysis_classes=[
+        # analysis_classes=[],
+        # analysis_classes=[
         #    lambda: TransformByDirectionScale(scales=parameter_scales),
-        #],
+        # ],
         success_checker=Consistency(atol=1e-2),
     )
     test_derivative = derivative.value
 
     # The test derivative is close to the expected derivative.
-    assert np.isclose(test_derivative, expected_derivative, rtol=1e-1, atol=1e-1, equal_nan=True).all()
+    assert np.isclose(
+        test_derivative,
+        expected_derivative,
+        rtol=1e-1,
+        atol=1e-1,
+        equal_nan=True,
+    ).all()
 
     # Same as above assert.
     check = NumpyIsCloseDerivativeCheck(
@@ -119,7 +131,7 @@ def test_simulate_petab_to_functions(problem_generator, scaled_parameters):
     amici_model = amici.petab_import.import_petab_problem(petab_problem)
     amici_solver = amici_model.getSolver()
 
-    if amici_model.getName() == 'simple':
+    if amici_model.getName() == "simple":
         amici_model.setSteadyStateSensitivityMode(
             amici.SteadyStateSensitivityMode.integrationOnly
         )
@@ -127,12 +139,18 @@ def test_simulate_petab_to_functions(problem_generator, scaled_parameters):
     amici_solver.setSensitivityOrder(amici.SensitivityOrder_first)
 
     if scaled_parameters:
-        point = np.asarray(list(
-            petab_problem.scale_parameters(dict(zip(
-                petab_problem.parameter_df.index,
-                point,
-            ))).values()
-        ))
+        point = np.asarray(
+            list(
+                petab_problem.scale_parameters(
+                    dict(
+                        zip(
+                            petab_problem.parameter_df.index,
+                            point,
+                        )
+                    )
+                ).values()
+            )
+        )
 
     amici_function, amici_derivative = simulate_petab_to_cached_functions(
         parameter_ids=petab_problem.parameter_df.index,
@@ -145,8 +163,16 @@ def test_simulate_petab_to_functions(problem_generator, scaled_parameters):
 
     expected_derivative = amici_derivative(point)
 
-    parameter_ids = list(petab_problem.parameter_df[petab_problem.parameter_df.estimate == 1].index)
-    parameter_scales = dict(petab_problem.parameter_df[petab_problem.parameter_df.estimate == 1].parameterScale)
+    parameter_ids = list(
+        petab_problem.parameter_df[
+            petab_problem.parameter_df.estimate == 1
+        ].index
+    )
+    parameter_scales = dict(
+        petab_problem.parameter_df[
+            petab_problem.parameter_df.estimate == 1
+        ].parameterScale
+    )
 
     analysis_classes = []
 

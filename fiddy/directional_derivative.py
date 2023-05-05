@@ -39,7 +39,7 @@ class Computer:
     autorun: bool = True
     completed: bool = False
     results: List[ComputerResult] = field(default_factory=list)
-    #value: Type.DIRECTIONAL_DERIVATIVE = None
+    # value: Type.DIRECTIONAL_DERIVATIVE = None
     relative_size: bool = False
 
     def __post_init__(self):
@@ -47,9 +47,9 @@ class Computer:
             self.method = methods[self.method](
                 function=self.function,
             )
-            #self.method = get_directional_derivative_method(self.method)(
+            # self.method = get_directional_derivative_method(self.method)(
             #    function=self.function,
-            #)
+            # )
         if self.autorun:
             self()
 
@@ -76,7 +76,11 @@ class Computer:
             direction=self.direction,
             size=self.get_size(),
         )
-        result = ComputerResult(method_id=self.method.id, value=value, metadata={'size': self.get_size(), 'size_absolute': self.size})
+        result = ComputerResult(
+            method_id=self.method.id,
+            value=value,
+            metadata={"size": self.get_size(), "size_absolute": self.size},
+        )
         self.results.append(result)
         self.completed = True
 
@@ -111,7 +115,9 @@ class ExpectedDirectionalDerivative(Computer):
 
     def __post_init__(self):
         if directional_derivative is None:
-            raise ValueError('Please provide an expected directional derivative result.')
+            raise ValueError(
+                "Please provide an expected directional derivative result."
+            )
 
 
 # @dataclass
@@ -199,6 +205,7 @@ class DirectionalDerivative:
             if self.fast:
                 self.completed = True
 
+
 class DirectionalDerivativeBase(abc.ABC):
     """Base class for default implementations of directional derivatives.
 
@@ -206,6 +213,7 @@ class DirectionalDerivativeBase(abc.ABC):
         function:
             The function.
     """
+
     id: MethodId
 
     def __init__(self, function: Type.FUNCTION):
@@ -276,13 +284,15 @@ class DirectionalDerivativeBase(abc.ABC):
 
 class TwoPointSlopeDirectionalDirection(DirectionalDerivativeBase):
     """Derivatives that are similar to a simple `(y1-y0)/h` slope function."""
+
     def compute(self, points: List[Type.POINT], size: Type.SIZE):
         y0, y1 = self.function(points[0]), self.function(points[1])
-        return (y1 - y0)/size
+        return (y1 - y0) / size
 
 
 class DefaultForward(TwoPointSlopeDirectionalDirection):
     """The forward difference derivative."""
+
     id = MethodId.FORWARD
 
     def get_points(self, point, direction, size):
@@ -293,6 +303,7 @@ class DefaultForward(TwoPointSlopeDirectionalDirection):
 
 class DefaultBackward(TwoPointSlopeDirectionalDirection):
     """The backward difference derivative."""
+
     id = MethodId.BACKWARD
 
     def get_points(self, point, direction, size):
@@ -303,11 +314,12 @@ class DefaultBackward(TwoPointSlopeDirectionalDirection):
 
 class DefaultCentral(TwoPointSlopeDirectionalDirection):
     """The central difference derivative."""
+
     id = MethodId.CENTRAL
 
     def get_points(self, point, direction, size):
-        x0 = point - step(direction=direction, size=size/2)
-        x1 = point + step(direction=direction, size=size/2)
+        x0 = point - step(direction=direction, size=size / 2)
+        x1 = point + step(direction=direction, size=size / 2)
         return [x0, x1]
 
 
@@ -359,17 +371,23 @@ def get_directions(
     # TODO test
     if isinstance(directions, dict):
         if ids is not None:
-            raise ValueError('Do not simultaneously specify `directions` as a dictionary, and direction IDs.')
+            raise ValueError(
+                "Do not simultaneously specify `directions` as a dictionary, and direction IDs."
+            )
         ids = list(directions.keys())
         directions = list(directions.values())
 
     if indices is not None and directions is not None:
-        raise ValueError('Do not specify indices if directions are specified, as indices will not be used.')
+        raise ValueError(
+            "Do not specify indices if directions are specified, as indices will not be used."
+        )
 
     # Get default directions.
     if point is not None:
         if directions is not None:
-            raise NotImplementedError('Please supply only one of `point` and `directions`.')
+            raise NotImplementedError(
+                "Please supply only one of `point` and `directions`."
+            )
         directions = standard_basis(point)
 
     # Apply user indices.
@@ -382,7 +400,7 @@ def get_directions(
 
     # Get default IDs.
     if ids is None:
-        ids = [f'direction_{index}' for index in range(len(directions))]
+        ids = [f"direction_{index}" for index in range(len(directions))]
 
     # Ensure sufficient IDs.
     if len(ids) != len(directions):
@@ -391,11 +409,13 @@ def get_directions(
             *ids,
             # Default IDs are generated for the remaining directions.
             *[
-                f'direction_{index}'
+                f"direction_{index}"
                 for index in range(len(ids), len(directions))
-            ]
+            ],
         ]
     if len(set(ids)) != len(directions):
-        raise ValueError('An error occurred related to IDs. Possible clause: duplicate IDs in the supplied `ids`.')
+        raise ValueError(
+            "An error occurred related to IDs. Possible clause: duplicate IDs in the supplied `ids`."
+        )
 
     return ids, directions

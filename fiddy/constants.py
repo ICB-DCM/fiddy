@@ -13,6 +13,7 @@ __all__ = [
 
 class Type:
     """Type annotation variables."""
+
     # The size is applied as the Euclidean distance in the
     # specified direction, between the point and the stepped point
     SCALAR = np.float64
@@ -31,7 +32,9 @@ class Type:
     # TODO rename analysis and success to e.g.
     #      - "ANALYSE_DIRECTIONAL_DERIVATIVE_METHOD" and
     #      - "ANALYSE_DERIVATIVE_METHOD" and
-    ANALYSIS_METHOD = Callable[["directional_derivative.DirectionalDerivative"], Any]
+    ANALYSIS_METHOD = Callable[
+        ["directional_derivative.DirectionalDerivative"], Any
+    ]
     SUCCESS_CHECKER = Callable[["derivative.Derivative"], Union[bool, Any]]
 
 
@@ -39,6 +42,7 @@ class Type:
 # FIXME use Difference instead, then i.e. Extrapolation too
 class MethodId(str, Enum):
     """Finite different method IDs."""
+
     BACKWARD = "backward"
     CENTRAL = "central"
     FORWARD = "forward"
@@ -49,14 +53,14 @@ class MethodId(str, Enum):
     HYBRID = "hybrid"
 
 
-#class AnalysisMethod(str, Enum):
+# class AnalysisMethod(str, Enum):
 #    ABSOLUTE_ERROR = "absolute_error"
 #    RELATIVE_ERROR = "relative_error"
-#=======
+# =======
 
 
 ## TODO remove? redundant
-#class GradientCheckMethod(str, Enum):
+# class GradientCheckMethod(str, Enum):
 #    BACKWARD = MethodId.BACKWARD
 #    CENTRAL = MethodId.CENTRAL
 #    FORWARD = MethodId.FORWARD
