@@ -10,7 +10,7 @@ from fiddy import MethodId, get_derivative, methods
 from fiddy.derivative import Computer
 from fiddy.analysis import ApproximateCentral
 from fiddy.success import Consistency
-from fiddy.derivative_check import NumpyIsCloseDerivativeCheck
+from fiddy.derivative_check import NumpyIsCloseDerivativeCheck, HybridDerivativeCheck
 
 
 RTOL = 1e-2
@@ -96,7 +96,7 @@ def test_get_derivative(point, sizes, output_shape):
         # FIXME default?
         sizes=[1e-10, 1e-5],
         # FIXME default?
-        method_ids=[MethodId.FORWARD, MethodId.BACKWARD],
+        method_ids=[MethodId.FORWARD, MethodId.BACKWARD, MethodId.CENTRAL],
         # FIXME default?
         analysis_classes=[ApproximateCentral],
         # FIXME default? not just "True" ...
@@ -105,7 +105,7 @@ def test_get_derivative(point, sizes, output_shape):
     test_value = derivative.value
     expected_value = expected_derivative_function(point)
 
-    check = NumpyIsCloseDerivativeCheck(
+    check = HybridDerivativeCheck(
         derivative=derivative,
         expectation=expected_value,
         point=point,
