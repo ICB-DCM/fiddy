@@ -36,40 +36,40 @@ def transform_gradient_lin_to_log10(gradient_value, parameter_value):
 
 
 transforms = {
-    LIN:   transform_gradient_lin_to_lin,
-    LOG:   transform_gradient_lin_to_log,
+    LIN: transform_gradient_lin_to_lin,
+    LOG: transform_gradient_lin_to_log,
     LOG10: transform_gradient_lin_to_log10,
 }
 
 
 all_rdata_derivatives = {
-    'x'     : 'sx',
-    'x0'    : 'sx0',
-    'x_ss'  : 'sx_ss',
-    'y'     : 'sy',
-    'sigmay': 'ssigmay',
-    'z'     : 'sz',
-    'rz'    : 'srz',
-    'sigmaz': 'ssigmaz',
-    'llh'   : 'sllh',
-    'sllh'  : 's2llh',
-    'res'   : 'sres',
+    "x": "sx",
+    "x0": "sx0",
+    "x_ss": "sx_ss",
+    "y": "sy",
+    "sigmay": "ssigmay",
+    "z": "sz",
+    "rz": "srz",
+    "sigmaz": "ssigmaz",
+    "llh": "sllh",
+    "sllh": "s2llh",
+    "res": "sres",
 }
 
 # The dimension of the AMICI ReturnData that contains parameters.
 # Should be shifted to the last dimension to be compatible with fiddy.
 derivative_parameter_dimension = {
-    'sx'      : 1,
-    'sx0'     : 0,
-    'sx_ss'   : 0,
-    'sy'      : 1,
-    'ssigmay' : 1,
+    "sx": 1,
+    "sx0": 0,
+    "sx_ss": 0,
+    "sy": 1,
+    "ssigmay": 1,
     #'sz'      : ???,
-    'srz'     : 2,
+    "srz": 2,
     #'ssigmaz' : ???,
-    'sllh'    : 0,
-    's2llh'   : 1,
-    'sres'    : 1,
+    "sllh": 0,
+    "s2llh": 1,
+    "sres": 1,
 }
 
 
@@ -85,7 +85,7 @@ def rdata_array_transpose(array: np.ndarray, variable: str) -> Tuple[int]:
 default_derivatives = {
     k: v
     for k, v in all_rdata_derivatives.items()
-    if v not in ['sz', 'srz', 'ssigmaz', 's2llh']
+    if v not in ["sz", "srz", "ssigmaz", "s2llh"]
 }
 
 
@@ -173,34 +173,46 @@ def run_amici_simulation_to_cached_functions(
     if parameter_ids is None:
         parameter_ids = amici_model.getParameterIds()
     if amici_edata is not None:
-        raise NotImplementedError('Customization of parameter values inside AMICI ExpData.')
+        raise NotImplementedError(
+            "Customization of parameter values inside AMICI ExpData."
+        )
     chosen_derivatives = default_derivatives
     if derivative_variables is not None:
         chosen_derivatives = {
-            k: all_rdata_derivatives[k]
-            for k in derivative_variables
+            k: all_rdata_derivatives[k] for k in derivative_variables
         }
 
     def run_amici_simulation(point: Type.POINT, order: amici.SensitivityOrder):
         problem_parameters = dict(zip(parameter_ids, point))
         amici_model.setParameterById(problem_parameters)
         amici_solver.setSensitivityOrder(order)
-        rdata = amici.runAmiciSimulation(model=amici_model, solver=amici_solver, edata=amici_edata)
+        rdata = amici.runAmiciSimulation(
+            model=amici_model, solver=amici_solver, edata=amici_edata
+        )
         return rdata
 
     def function(point: Type.POINT):
-        rdata = run_amici_simulation(point=point, order=amici.SensitivityOrder.none)
+        rdata = run_amici_simulation(
+            point=point, order=amici.SensitivityOrder.none
+        )
         outputs = {
             variable: fiddy_array(getattr(rdata, variable))
             for variable in chosen_derivatives
         }
-        rdata_flat = np.concatenate([output.flat for output in outputs.values()])
+        rdata_flat = np.concatenate(
+            [output.flat for output in outputs.values()]
+        )
         return rdata_flat
 
     def derivative(point: Type.POINT, return_dict: bool = False):
-        rdata = run_amici_simulation(point=point, order=amici.SensitivityOrder.first)
+        rdata = run_amici_simulation(
+            point=point, order=amici.SensitivityOrder.first
+        )
         outputs = {
-            variable: rdata_array_transpose(array=fiddy_array(getattr(rdata, derivative_variable)), variable=derivative_variable)
+            variable: rdata_array_transpose(
+                array=fiddy_array(getattr(rdata, derivative_variable)),
+                variable=derivative_variable,
+            )
             for variable, derivative_variable in chosen_derivatives.items()
         }
         rdata_flat = np.concatenate(
@@ -220,19 +232,31 @@ def run_amici_simulation_to_cached_functions(
 
     # Get structure
     dummy_point = fiddy_array(amici_model.getParameters())
-    dummy_rdata = run_amici_simulation(point=dummy_point, order=amici.SensitivityOrder.first)
+    dummy_rdata = run_amici_simulation(
+        point=dummy_point, order=amici.SensitivityOrder.first
+    )
 
     structures = {
-        'function': {variable: None for variable in chosen_derivatives},
-        'derivative': {variable: None for variable in chosen_derivatives},
+        "function": {variable: None for variable in chosen_derivatives},
+        "derivative": {variable: None for variable in chosen_derivatives},
     }
     function_position = 0
     derivative_position = 0
     for variable, derivative_variable in chosen_derivatives.items():
         function_array = fiddy_array(getattr(dummy_rdata, variable))
-        derivative_array = fiddy_array(getattr(dummy_rdata, derivative_variable))
-        structures['function'][variable] = (function_position, function_position + function_array.size, function_array.shape)
-        structures['derivative'][variable] = (derivative_position, derivative_position + derivative_array.size, derivative_array.shape)
+        derivative_array = fiddy_array(
+            getattr(dummy_rdata, derivative_variable)
+        )
+        structures["function"][variable] = (
+            function_position,
+            function_position + function_array.size,
+            function_array.shape,
+        )
+        structures["derivative"][variable] = (
+            derivative_position,
+            derivative_position + derivative_array.size,
+            derivative_array.shape,
+        )
         function_position += function_array.size
         derivative_position += derivative_array.size
 
@@ -248,7 +272,9 @@ def flatten(arrays: Dict[str, Type.ARRAY]) -> Type.ARRAY:
     return flattened_value
 
 
-def reshape(array: Type.ARRAY, structure: TYPE_STRUCTURE) -> Dict[str, Type.ARRAY]:
+def reshape(
+    array: Type.ARRAY, structure: TYPE_STRUCTURE
+) -> Dict[str, Type.ARRAY]:
     reshaped_value = {
         variable: array[start:stop].reshape(shape)
         for variable, (start, stop, shape) in structure.items()
@@ -307,21 +333,19 @@ def simulate_petab_to_cached_functions(
         edatas = create_edatas(
             amici_model=amici_model,
             petab_problem=petab_problem,
-            simulation_conditions=\
-                petab_problem.get_simulation_conditions_from_measurement_df(),
+            simulation_conditions=petab_problem.get_simulation_conditions_from_measurement_df(),
         )
 
     parameter_mapping = None
     if precreate_parameter_mapping:
         parameter_mapping = create_parameter_mapping(
             petab_problem=petab_problem,
-            simulation_conditions=\
-                petab_problem.get_simulation_conditions_from_measurement_df(),
+            simulation_conditions=petab_problem.get_simulation_conditions_from_measurement_df(),
             scaled_parameters=kwargs.get(
-                'scaled_parameters',
+                "scaled_parameters",
                 (
                     signature(simulate_petab)
-                    .parameters['scaled_parameters']
+                    .parameters["scaled_parameters"]
                     .default
                 ),
             ),
@@ -329,17 +353,15 @@ def simulate_petab_to_cached_functions(
         )
 
     precreated_kwargs = {
-        'edatas': edatas,
-        'parameter_mapping': parameter_mapping,
-        'petab_problem': petab_problem,
+        "edatas": edatas,
+        "parameter_mapping": parameter_mapping,
+        "petab_problem": petab_problem,
     }
     precreated_kwargs = {
-        k: v
-        for k, v in precreated_kwargs.items()
-        if v is not None
+        k: v for k, v in precreated_kwargs.items() if v is not None
     }
 
-    amici_solver = kwargs.pop('solver', amici_model.getSolver())
+    amici_solver = kwargs.pop("solver", amici_model.getSolver())
 
     simulate_petab_partial = partial(
         simulate_petab,
@@ -368,7 +390,9 @@ def simulate_petab_to_cached_functions(
 
     def derivative(point: Type.POINT) -> Type.POINT:
         result = simulate_petab_full(point, order=amici.SensitivityOrder.first)
-        sllh = np.array([result[SLLH][parameter_id] for parameter_id in parameter_ids])
+        sllh = np.array(
+            [result[SLLH][parameter_id] for parameter_id in parameter_ids]
+        )
         return sllh
 
     if cache:
