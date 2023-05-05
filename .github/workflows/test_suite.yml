@@ -1,8 +1,13 @@
 name: Test suite
 on:
   push:
+    branches:
+    - main
   pull_request:
   workflow_dispatch:
+  schedule:
+    # run Sunday at 01:23 UTC
+    - cron: '23 1 * * SUN'
 
 jobs:
   build:
