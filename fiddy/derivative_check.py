@@ -210,6 +210,7 @@ class HybridDerivativeCheck(DerivativeCheck):
                     output={'return': results},
                     success=all(results)
                 )
+                directional_derivative_check_results.append(directional_derivative_check_result)
                 results_all.append(results)
 
         success = all(chain(*results_all))
