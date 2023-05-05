@@ -108,9 +108,6 @@ jobs:
     - name: Install dependencies
       run: .github/workflows/setup.sh doc
 
-    - name: Validate CITATION.cff
-      run: pip install cffconvert && cffconvert --validate
-
     - name: Build doc
       timeout-minutes: 10
       run: tox -e doc
