@@ -49,7 +49,7 @@ jobs:
 
     - name: Install package
       run: |
-        pip install --upgrade --upgrade-strategy eager -e .[tests,amici,pypesto]
+        pip install --upgrade --upgrade-strategy eager -e .[tests,amici]
 
     - name: Run tests
       run: |

@@ -9,7 +9,8 @@ default_memory_kwargs = {
     "location": "cache_fiddy",
     "verbose": 0,
 }
-ram_cache_parent_path = Path("/dev/shm")
+# TODO change to multiprocessing.shared_memory
+ram_cache_parent_path = Path("/dev/shm")  # noqa: S108
 
 
 class Function:
@@ -19,14 +20,7 @@ class Function:
         self,
         function: Type.FUNCTION,
     ):
-        """Construct a cached function.
-
-        `kwargs` is passed on to `joblib.Memory`.
-
-        Args:
-            ram_cache:
-                Whether to cache in RAM. If `False`, disk is used instead.
-        """
+        """Construct a function."""
         self.function = function
 
     def __call__(self, point: Type.POINT) -> Type.FUNCTION_OUTPUT:

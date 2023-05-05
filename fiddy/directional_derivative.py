@@ -57,7 +57,8 @@ class Computer:
             warnings.warn(
                 "Point has no component in this direction. "
                 "Set `Computer.relative_size=False` to avoid this. "
-                f"Using default small step size `fiddy.EPSILON`: {EPSILON}"
+                f"Using default small step size `fiddy.EPSILON`: {EPSILON}",
+                stacklevel=1,
             )
             size = EPSILON
         return size
@@ -210,7 +211,8 @@ class DirectionalDerivativeBase(abc.ABC):
     id: MethodId
 
     def __init__(self, function: Type.FUNCTION):
-        """
+        """Construct.
+
         Args:
             function:
                 The function.
