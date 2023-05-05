@@ -8,17 +8,22 @@ import numpy as np
 import pandas as pd
 
 from .constants import (
-    #TYPE_DIMENSION,
-    #TYPE_FUNCTION,
-    #TYPE_SIZE,
-    #TYPE_OUTPUT,
-    #TYPE_GRADIENT_FUNCTION,
+    # TYPE_DIMENSION,
+    # TYPE_FUNCTION,
+    # TYPE_SIZE,
+    # TYPE_OUTPUT,
+    # TYPE_GRADIENT_FUNCTION,
     MethodId,
-    #AnalysisMethod,
+    # AnalysisMethod,
     Type,
 )
 
-from .directional_derivative import methods, get_directions, Computer, DirectionalDerivative
+from .directional_derivative import (
+    methods,
+    get_directions,
+    Computer,
+    DirectionalDerivative,
+)
 
 from .step import step
 from .success import Success
@@ -46,7 +51,9 @@ class DirectionalDerivativeCheckResult:
 class DerivativeCheckResult:
     method_id: str
     """The method that determined whether the directional derivative is correct."""
-    directional_derivative_check_results: List[DirectionalDerivativeCheckResult]
+    directional_derivative_check_results: List[
+        DirectionalDerivativeCheckResult
+    ]
     """The results from checking individual directions."""
     test: Type.DERIVATIVE
     """The value that was tested."""
@@ -61,7 +68,7 @@ class DerivativeCheckResult:
     def df(self):
         df = pd.DataFrame(self.directional_derivative_check_results)
         # FIXME string literal
-        df.set_index('direction_id', inplace=True)
+        df.set_index("direction_id", inplace=True)
         return df
 
 
@@ -81,6 +88,7 @@ class DerivativeCheck(abc.ABC):
             associated with the derivative of these multiple outputs with respect
             to multiple directions.
     """
+
     method_id: str
     """The name of the derivative check method."""
 
@@ -94,7 +102,7 @@ class DerivativeCheck(abc.ABC):
         self.expectation = expectation
         self.point = point
 
-        self.output_indices = self.expectation.shape[:-len(self.point.shape)]
+        self.output_indices = self.expectation.shape[: -len(self.point.shape)]
 
     def __call__(self, *args, **kwargs):
         return self.method(*args, **kwargs)
@@ -105,12 +113,14 @@ class DerivativeCheck(abc.ABC):
 
 
 class NumpyIsCloseDerivativeCheck(DerivativeCheck):
-    method_id = 'np.isclose'
+    method_id = "np.isclose"
 
     def method(self, *args, **kwargs):
         directional_derivative_check_results = []
         success = True
-        for direction_index, directional_derivative in enumerate(self.derivative.directional_derivatives):
+        for direction_index, directional_derivative in enumerate(
+            self.derivative.directional_derivatives
+        ):
             test_value = directional_derivative.value
 
             expected_value = []
@@ -126,18 +136,24 @@ class NumpyIsCloseDerivativeCheck(DerivativeCheck):
                 **kwargs,
             )
 
-            directional_derivative_check_result = DirectionalDerivativeCheckResult(
-                direction_id=directional_derivative.id,
-                method_id=self.method_id,
-                test=test_value,
-                expectation=expected_value,
-                output={'return': test_result},
-                success=test_result.all(),
+            directional_derivative_check_result = (
+                DirectionalDerivativeCheckResult(
+                    direction_id=directional_derivative.id,
+                    method_id=self.method_id,
+                    test=test_value,
+                    expectation=expected_value,
+                    output={"return": test_result},
+                    success=test_result.all(),
+                )
             )
 
-            directional_derivative_check_results.append(directional_derivative_check_result)
+            directional_derivative_check_results.append(
+                directional_derivative_check_result
+            )
 
-        success = all([r.success for r in directional_derivative_check_results])
+        success = all(
+            [r.success for r in directional_derivative_check_results]
+        )
         derivative_check_result = DerivativeCheckResult(
             method_id=self.method_id,
             directional_derivative_check_results=directional_derivative_check_results,
@@ -146,4 +162,3 @@ class NumpyIsCloseDerivativeCheck(DerivativeCheck):
             success=success,
         )
         return derivative_check_result
-

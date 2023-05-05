@@ -14,14 +14,15 @@ import mock
 
 import os
 import sys
-sys.path.insert(0, os.path.abspath('..'))
+
+sys.path.insert(0, os.path.abspath(".."))
 
 
 # -- Project information -----------------------------------------------------
 
-project = 'fiddy'
-copyright = '2022, fiddy developers'
-author = 'fiddy developers'
+project = "fiddy"
+copyright = "2022, fiddy developers"
+author = "fiddy developers"
 
 
 # -- General configuration ---------------------------------------------------
@@ -30,18 +31,18 @@ author = 'fiddy developers'
 # extensions coming with Sphinx (named 'sphinx.ext.*') or your custom
 # ones.
 extensions = [
-    'sphinx.ext.autosummary',
-    'sphinx.ext.autodoc',
-    'sphinx.ext.napoleon',
-    'sphinx_autodoc_typehints',
-    'sphinx.ext.intersphinx',
+    "sphinx.ext.autosummary",
+    "sphinx.ext.autodoc",
+    "sphinx.ext.napoleon",
+    "sphinx_autodoc_typehints",
+    "sphinx.ext.intersphinx",
 ]
 
 intersphinx_mapping = {
-    'petab': ('https://petab.readthedocs.io/en/stable/', None),
-    'pandas': ('https://pandas.pydata.org/docs/', None),
-    'numpy': ('https://numpy.org/devdocs/', None),
-    'python': ('https://docs.python.org/3', None),
+    "petab": ("https://petab.readthedocs.io/en/stable/", None),
+    "pandas": ("https://pandas.pydata.org/docs/", None),
+    "numpy": ("https://numpy.org/devdocs/", None),
+    "python": ("https://docs.python.org/3", None),
 }
 
 # sphinx-autodoc-typehints
@@ -50,15 +51,15 @@ typehints_document_rtype = True
 set_type_checking_flag = True
 
 # Add any paths that contain templates here, relative to this directory.
-templates_path = ['_templates']
+templates_path = ["_templates"]
 
 # List of patterns, relative to source directory, that match files and
 # directories to ignore when looking for source files.
 # This pattern also affects html_static_path and html_extra_path.
-exclude_patterns = ['_build', 'Thumbs.db', '.DS_Store']
+exclude_patterns = ["_build", "Thumbs.db", ".DS_Store"]
 
 
-autodoc_mock_imports = ['amici', 'amici.amici', 'amici.petab_objective']
+autodoc_mock_imports = ["amici", "amici.amici", "amici.petab_objective"]
 for mod_name in autodoc_mock_imports:
     sys.modules[mod_name] = mock.MagicMock()
 
@@ -73,4 +74,4 @@ html_theme = "sphinx_rtd_theme"
 # Add any paths that contain custom static files (such as style sheets) here,
 # relative to this directory. They are copied after the builtin static files,
 # so a file named "default.css" will overwrite the builtin "default.css".
-html_static_path = ['_static']
+html_static_path = ["_static"]

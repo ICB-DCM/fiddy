@@ -14,13 +14,18 @@ from .constants import (
 )
 
 from .analysis import Analysis
-from .directional_derivative import methods, get_directions, Computer, DirectionalDerivative
+from .directional_derivative import (
+    methods,
+    get_directions,
+    Computer,
+    DirectionalDerivative,
+)
 
 from .success import Success
 
 
-#@dataclass
-#class Analysis:
+# @dataclass
+# class Analysis:
 #    # Change to callable?
 #    method: Type.ANALYSIS_METHOD
 #    result: Any
@@ -61,7 +66,6 @@ class Derivative:
         "autorun",
     ]
 
-
     def __init__(
         self,
         # function: TYPE_FUNCTION,
@@ -85,13 +89,13 @@ class Derivative:
     def df_full(self):
         _df = pd.DataFrame(data=self.directional_derivatives)
         # FIXME string literal
-        _df.set_index('id', inplace=True)
+        _df.set_index("id", inplace=True)
         return _df
 
     @property
     def series(self):
         # FIXME string literal
-        return self.df['value']
+        return self.df["value"]
 
     @property
     def dict(self):
@@ -112,9 +116,13 @@ class Derivative:
             for directional_derivative in self.directional_derivatives
         ]
         df = self.df_full.drop(columns=self.hide_columns)
-        df['computer_results'] = [pd.DataFrame(data=results) for results in computer_results]
-        df['analysis_results'] = [pd.DataFrame(data=results) for results in analysis_results]
-        df.index.rename('direction', inplace=True)
+        df["computer_results"] = [
+            pd.DataFrame(data=results) for results in computer_results
+        ]
+        df["analysis_results"] = [
+            pd.DataFrame(data=results) for results in analysis_results
+        ]
+        df.index.rename("direction", inplace=True)
         return df
 
     def print(self):
@@ -182,7 +190,7 @@ def get_derivative(
                     methods.get(
                         method_id,
                         None,
-                    )
+                    ),
                 )(function=function)
                 if method is None:
                     raise NotImplementedError(
@@ -207,15 +215,17 @@ def get_derivative(
             # TODO convert str to method. default?
             analyses=[analysis_class() for analysis_class in analysis_classes],
             # TODO proper `def` default
-            success_checker=success_checker if success_checker is not None else lambda _: True,
+            success_checker=success_checker
+            if success_checker is not None
+            else lambda _: True,
         )
         directional_derivatives.append(directional_derivative)
 
     return Derivative(
         directional_derivatives=directional_derivatives,
         autorun=True,
-        #function=function,
-        #request=request,
-        #*args,
-        #**kwargs,
+        # function=function,
+        # request=request,
+        # *args,
+        # **kwargs,
     )
