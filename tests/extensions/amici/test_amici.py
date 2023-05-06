@@ -174,8 +174,6 @@ def test_simulate_petab_to_functions(problem_generator, scaled_parameters):
         ].parameterScale
     )
 
-    analysis_classes = []
-
     derivative = get_derivative(
         function=amici_function,
         point=point,
@@ -184,7 +182,6 @@ def test_simulate_petab_to_functions(problem_generator, scaled_parameters):
         method_ids=[MethodId.FORWARD, MethodId.BACKWARD, MethodId.CENTRAL],
         success_checker=Consistency(),
     )
-    test_value = derivative.value
 
     check = NumpyIsCloseDerivativeCheck(
         derivative=derivative,

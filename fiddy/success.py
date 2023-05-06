@@ -93,14 +93,14 @@ class Consistency(Success):
             values = list(results.values())
             success_by_size[size] = np.isclose(
                 values,
-                np.nanmean(values),
+                np.nanmean(values, axis=0),
                 rtol=self.rtol/2,
                 atol=self.atol/2,
                 equal_nan=self.equal_nan,
             ).all()
 
         consistent_results = [
-            np.nanmean([v for v in results_by_size[size].values()])
+            np.nanmean(list(results_by_size[size].values()), axis=0)
             for size, success in success_by_size.items()
             if success
         ]
@@ -115,5 +115,6 @@ class Consistency(Success):
                 atol=self.atol,
                 equal_nan=self.equal_nan
             ).all() and not np.isnan(consistent_results).all()
+        value = np.average(np.array(consistent_results), axis=0)
 
         return success, value

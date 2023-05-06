@@ -117,7 +117,6 @@ class NumpyIsCloseDerivativeCheck(DerivativeCheck):
 
     def method(self, *args, **kwargs):
         directional_derivative_check_results = []
-        success = True
         for direction_index, directional_derivative in enumerate(
             self.derivative.directional_derivatives
         ):
