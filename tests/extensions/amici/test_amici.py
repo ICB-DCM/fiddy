@@ -160,11 +160,11 @@ def test_simulate_petab_to_functions(problem_generator, scaled_parameters):
             petab_problem.parameter_df.estimate == 1
         ].index
     )
-    # parameter_scales = dict(
-    #     petab_problem.parameter_df[
-    #         petab_problem.parameter_df.estimate == 1
-    #     ].parameterScale
-    # )
+    parameter_scales = dict(
+        petab_problem.parameter_df[
+            petab_problem.parameter_df.estimate == 1
+        ].parameterScale
+    )
 
     derivative = get_derivative(
         function=amici_function,
