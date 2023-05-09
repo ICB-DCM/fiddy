@@ -34,7 +34,7 @@ extensions = [
     "sphinx.ext.autosummary",
     "sphinx.ext.autodoc",
     "sphinx.ext.napoleon",
-#    "sphinx_autodoc_typehints", # fails
+#    "sphinx_autodoc_typehints",  # FIXME fails
     "sphinx.ext.intersphinx",
 ]
 
