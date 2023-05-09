@@ -167,6 +167,8 @@ def run_amici_simulation_to_cached_functions(
 
         unraveled = unravel_derivatives(raveled_derivatives=grad_flat)
         breakpoint()
+        Returns:
+            function, derivatives and structure
     """
     if amici_solver is None:
         amici_solver = amici_model.getSolver()
