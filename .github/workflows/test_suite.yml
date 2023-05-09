@@ -40,7 +40,7 @@ jobs:
     # TODO remove once released
     - name: Install custom AMICI
       run: |
-        pip install --upgrade --upgrade-strategy eager -e git+https://github.com/AMICI-dev/amici.git@fix_simulate_petab_sllh#egg=amici\&subdirectory=python/sdist
+        pip install --upgrade --upgrade-strategy eager -e git+https://github.com/AMICI-dev/amici.git@develop#egg=amici\&subdirectory=python/sdist
 
     - name: Install package
       run: |
