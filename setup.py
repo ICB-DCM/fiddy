@@ -33,7 +33,7 @@ def absolute_links(txt):
     return txt
 
 
-minimum_python_version = "3.8.0"  # for NumPy
+minimum_python_version = "3.9.0"  # for NumPy
 if sys.version_info < tuple(map(int, minimum_python_version.split("."))):
     sys.exit(f"{repo} requires Python >= {minimum_python_version}")
 
