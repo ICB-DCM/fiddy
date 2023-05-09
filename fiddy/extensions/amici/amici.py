@@ -262,7 +262,7 @@ def simulate_petab_to_cached_functions(
     cache: bool = True,
     precreate_edatas: bool = True,
     precreate_parameter_mapping: bool = True,
-    simulate_petab: Callable[[Any], Dict[str, Any]] = None,
+    simulate_petab: Callable[[Any], str] = None,
     **kwargs,
 ) -> Tuple[Type.FUNCTION, Type.FUNCTION]:
     r"""Convert `amici.petab_objective.simulate_petab` to fiddy functions.
