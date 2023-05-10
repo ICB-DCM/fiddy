@@ -160,7 +160,6 @@ class NumpyIsCloseDerivativeCheck(DerivativeCheck):
             success=success,
         )
         return derivative_check_result
-<<<<<<< HEAD
     
 class HybridDerivativeCheck(DerivativeCheck):
     method_id = 'hybrid' 
@@ -236,7 +235,3 @@ class HybridDerivativeCheck(DerivativeCheck):
         )
         return derivative_check_result
     
-
-
-=======
->>>>>>> main

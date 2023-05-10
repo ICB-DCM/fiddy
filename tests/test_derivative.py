@@ -128,6 +128,34 @@ def test_get_derivative(point, sizes, output_shape):
     result = check(rtol=1e-2, atol=1e-3)
     assert result.success
 
+def test_get_derivative_hybrid(point, sizes, output_shape):
+    function = partial(rosenbrock, output_shape=output_shape)
+    expected_derivative_function = partial(
+        rosenbrock_der, output_shape=output_shape
+    )
+    derivative = get_derivative(
+        function=function,
+        point=point,
+        # FIXME default?
+        sizes=[1e-10, 1e-5],
+        # FIXME default?
+        method_ids=[MethodId.FORWARD, MethodId.BACKWARD, MethodId.CENTRAL],
+        # FIXME default?
+        analysis_classes=[ApproximateCentral],
+        # FIXME default? not just "True" ...
+        success_checker=Consistency(),
+    )
+    test_value = derivative.value
+    expected_value = expected_derivative_function(point)
+
+    check = HybridDerivativeCheck(
+        derivative=derivative,
+        expectation=expected_value,
+        point=point,
+    )
+    result = check(rtol=1e-2, atol=1e-3)
+    assert result.success
+
 
 def test_get_derivative_relative():
     point = np.array((3, 4, 0))
