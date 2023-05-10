@@ -138,35 +138,8 @@ def run_amici_simulation_to_cached_functions(
         parameter_ids:
             The IDs that correspond to the values in the parameter vector that is simulated.
 
-    tmp:
-        derivative_shapes = None
-        derivatives = []
-        for rdata in result['rdatas']:
-            rdata_derivatives = [np.array(rdata.get(derivative_key), dtype=Type.SCALAR) for derivative_key in output_keys.values()]
-            if derivative_shapes is None:
-                derivative_shapes = [derivative.shape for derivative in rdata_derivatives]
-            derivatives.append(rdata_derivatives)
-
-        # The shapes of output in some dimensions should be equal (not timepoints since difference conditions have different measurements)
-        assert [rdata_derivatives[index].shape == derivatives[0][index].shape for rdata_derivatives in derivatives for index in range(len(rdata_derivatives))]
-
-        # TODO (1) sum derivative values across all measurements within a condition
-        # TODO (2) then sum across all conditions
-        #grad_flat = np.ravel(dv).astype(Type.SCALAR)
-        grad_flat = np.ravel(derivatives)
-
-        def unravel_derivatives(raveled_derivatives: Type.DERIVATIVE, derivative_shapes=derivative_shapes) -> List[Type.DERIVATIVE]:
-            head = 0
-            unraveled = []
-            for shape in derivative_shapes:
-                length = np.product(shape)
-                piece = raveled_derivatives[head:head+length].reshape(shape)
-                unraveled.append(piece)
-                head += length
-            return unraveled
-
-        unraveled = unravel_derivatives(raveled_derivatives=grad_flat)
-        breakpoint()
+        Returns:
+            function, derivatives and structure
     """
     if amici_solver is None:
         amici_solver = amici_model.getSolver()
@@ -289,7 +262,7 @@ def simulate_petab_to_cached_functions(
     cache: bool = True,
     precreate_edatas: bool = True,
     precreate_parameter_mapping: bool = True,
-    simulate_petab: Callable[[Any], Dict[str, Any]] = None,
+    simulate_petab: Callable[[Any], str] = None,
     **kwargs,
 ) -> Tuple[Type.FUNCTION, Type.FUNCTION]:
     r"""Convert `amici.petab_objective.simulate_petab` to fiddy functions.
