@@ -128,6 +128,25 @@ def test_get_derivative(point, sizes, output_shape):
     result = check(rtol=1e-2, atol=1e-3)
     assert result.success
 
+
+@pytest.mark.parametrize(
+    "point, sizes, output_shape",
+    [
+        (np.array(point), sizes, output_shape)
+        for point in [
+            (1, 0, 0),
+            (0.9, 0.1, 0.2, 0.4),
+        ]
+        for sizes in [
+            [1e-10, 1e-5],
+        ]
+        for output_shape in [
+            (1,),
+            (1, 2),
+            (5, 3, 6, 2, 4),
+        ]
+    ],
+)
 def test_get_derivative_hybrid(point, sizes, output_shape):
     function = partial(rosenbrock, output_shape=output_shape)
     expected_derivative_function = partial(
@@ -153,6 +172,7 @@ def test_get_derivative_hybrid(point, sizes, output_shape):
         expectation=expected_value,
         point=point,
     )
+    # based on given tolerances, hybrid check should fail
     result = check(rtol=1e-2, atol=1e-3)
     assert result.success
 

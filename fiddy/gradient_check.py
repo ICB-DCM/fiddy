@@ -140,7 +140,7 @@ def gradient_check(
 
     if sort:
         results_df.sort_values(
-            by=['dimension', 'size'],
+            by=["dimension", "size"],
             inplace=True,
         )
 
@@ -266,7 +266,7 @@ def keep_lowest_error(
     if not inplace:
         sort_df = minimal_results_df
     sort_df.sort_values(
-        ['success', 'dimension', 'size'],
+        ["success", "dimension", "size"],
         ascending=[False, True, True],
         inplace=True,
     )
