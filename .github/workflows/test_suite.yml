@@ -108,6 +108,17 @@ jobs:
     - name: Install dependencies
       run: .github/workflows/setup.sh doc
 
+    - name: apt
+      run: |
+        sudo apt-get update \
+          && sudo apt-get install -y \
+          swig \
+          libatlas-base-dev
+
+    - name: Install package
+      run: |
+        pip install --upgrade --upgrade-strategy eager -e .[doc]
+
     - name: Build doc
       timeout-minutes: 10
       run: tox -e doc
