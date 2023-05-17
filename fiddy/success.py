@@ -75,14 +75,15 @@ class Consistency(Success):
         analysis_results = directional_derivative.get_analysis_results()
         results_by_size = {}
         for result in [*computer_results, *analysis_results]:
-            size = result.metadata.get("size", None)
+            size = result.metadata.get("size_absolute", None)
             if size is None:
                 continue
             if size not in results_by_size:
                 results_by_size[size] = {}
             if result.method_id in results_by_size[size]:
                 raise ValueError(
-                    f'Duplicate, and possibly conflicting, results for method "{result.method_id}" and size "{size}".'
+                    f'Duplicate, and possibly conflicting, results for method "{result.method_id}" and size "{size}".',
+                    stacklevel=1,
                 )
             results_by_size[size][result.method_id] = result.value
 
