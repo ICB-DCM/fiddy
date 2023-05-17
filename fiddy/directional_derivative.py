@@ -1,21 +1,13 @@
 import abc
-from typing import Any, Callable, Dict, List, Union, Tuple
 import warnings
+from dataclasses import dataclass, field
+from typing import Any, Callable, Dict, List, Tuple, Union
 
 import numpy as np
-import pandas as pd
-
-from .constants import (
-    MethodId,
-    Type,
-    EPSILON,
-)
-
-from .step import step
 
 from . import directional_derivative
-
-from dataclasses import dataclass, field
+from .constants import EPSILON, MethodId, Type
+from .step import step
 
 
 @dataclass
@@ -65,7 +57,8 @@ class Computer:
             warnings.warn(
                 "Point has no component in this direction. "
                 "Set `Computer.relative_size=False` to avoid this. "
-                f"Using default small step size `fiddy.EPSILON`: {EPSILON}"
+                f"Using default small step size `fiddy.EPSILON`: {EPSILON}",
+                stacklevel=1,
             )
             size = EPSILON
         return size
@@ -100,6 +93,7 @@ class Computer:
 #     direction: Type.DIRECTION
 #     # FIXME support callable
 #     directional_derivative: Type.GRADIENT
+
 
 # TODO do not inherit from computer
 #      define common base class to both?
@@ -217,7 +211,8 @@ class DirectionalDerivativeBase(abc.ABC):
     id: MethodId
 
     def __init__(self, function: Type.FUNCTION):
-        """
+        """Construct.
+
         Args:
             function:
                 The function.

@@ -2,9 +2,7 @@
 
 import numpy as np
 
-from .constants import (
-    Type,
-)
+from .constants import Type
 
 
 def step(

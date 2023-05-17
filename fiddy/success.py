@@ -3,11 +3,9 @@ from typing import Any, Callable, Union
 
 import numpy as np
 
-
+from . import analysis, directional_derivative
 from .constants import Type
 from .directional_derivative import DirectionalDerivative
-
-from . import directional_derivative, analysis, derivative
 
 
 class Success:
@@ -50,20 +48,20 @@ class Consistency(Success):
         equal_nan: bool = True,
     ):
         super().__init__()
-        if computer_parser is None:
-            computer_parser = (
-                lambda computer, size: computer.value
-                if computer.size == size
-                else None
-            )
-        self.computer_parser = computer_parser
-        if analysis_parser is None:
-            analysis_parser = (
-                lambda analysis: analysis.value
-                if computer.size == size
-                else None
-            )
-        self.analysis_parser = analysis_parser
+        # if computer_parser is None:
+        #     computer_parser = (
+        #         lambda computer, size: computer.value
+        #         if computer.size == size
+        #         else None
+        #     )
+        # self.computer_parser = computer_parser
+        # if analysis_parser is None:
+        #     analysis_parser = (
+        #         lambda analysis: analysis.value
+        #         if computer.size == size
+        #         else None
+        #     )
+        # self.analysis_parser = analysis_parser
 
         self.rtol = rtol
         self.atol = atol
@@ -94,8 +92,8 @@ class Consistency(Success):
             success_by_size[size] = np.isclose(
                 values,
                 np.nanmean(values, axis=0),
-                rtol=self.rtol/2,
-                atol=self.atol/2,
+                rtol=self.rtol / 2,
+                atol=self.atol / 2,
                 equal_nan=self.equal_nan,
             ).all()
 
@@ -108,13 +106,16 @@ class Consistency(Success):
         success = False
         value = np.nanmean(np.array(consistent_results), axis=0)
         if consistent_results:
-            success = np.isclose(
-                consistent_results,
-                value,
-                rtol=self.rtol,
-                atol=self.atol,
-                equal_nan=self.equal_nan
-            ).all() and not np.isnan(consistent_results).all()
+            success = (
+                np.isclose(
+                    consistent_results,
+                    value,
+                    rtol=self.rtol,
+                    atol=self.atol,
+                    equal_nan=self.equal_nan,
+                ).all()
+                and not np.isnan(consistent_results).all()
+            )
         value = np.average(np.array(consistent_results), axis=0)
 
         return success, value
