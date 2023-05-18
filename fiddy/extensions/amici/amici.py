@@ -72,8 +72,17 @@ derivative_parameter_dimension = {
 
 
 def rdata_array_transpose(array: np.ndarray, variable: str) -> Tuple[int]:
+    if array.size == 0:
+        return array
     original_parameter_dimension = derivative_parameter_dimension[variable]
     return np.moveaxis(array, original_parameter_dimension, -1)
+
+
+def fiddy_array_transpose(array: np.ndarray, variable: str) -> Tuple[int]:
+    if array.size == 0:
+        return array
+    original_parameter_dimension = derivative_parameter_dimension[variable]
+    return np.moveaxis(array, -1, original_parameter_dimension)
 
 
 default_derivatives = {
@@ -240,13 +249,42 @@ def flatten(arrays: Dict[str, Type.ARRAY]) -> Type.ARRAY:
 
 
 def reshape(
-    array: Type.ARRAY, structure: TYPE_STRUCTURE
+    array: Type.ARRAY,
+    structure: TYPE_STRUCTURE,
+    sensitivities: bool = False,
 ) -> Dict[str, Type.ARRAY]:
-    reshaped_value = {
-        variable: array[start:stop].reshape(shape)
-        for variable, (start, stop, shape) in structure.items()
-    }
-    return reshaped_value
+    reshaped = {}
+    for variable, (start, stop, shape) in structure.items():
+        # array is currently "flattened" w.r.t. fiddy dimensions
+        # hence, if sensis, reshape w.r.t. fiddy dimensions
+        if sensitivities and (
+            dimension0 := derivative_parameter_dimension.get(
+                "s" + variable, False
+            )
+        ):
+            shape = [
+                size
+                for dimension, size in enumerate(shape)
+                if dimension != dimension0
+            ] + [shape[dimension0]]
+
+        array = array[start:stop]
+        if array.size != 0:
+            array = array.reshape(shape)
+
+        # now reshape to AMICI dimensions
+        if sensitivities and (
+            dimension0 := derivative_parameter_dimension.get(
+                "s" + variable, False
+            )
+        ):
+            array = fiddy_array_transpose(
+                array=array,
+                variable="s" + variable,
+            )
+        reshaped[variable] = array
+
+    return reshaped
 
 
 def simulate_petab_to_cached_functions(
