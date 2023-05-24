@@ -43,6 +43,7 @@ class MethodId(str, Enum):
     BACKWARD = "backward"
     CENTRAL = "central"
     FORWARD = "forward"
+    RICHARDSON = "richardson"
     # richardson
     # five point?
 
