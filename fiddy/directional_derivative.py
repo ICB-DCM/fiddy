@@ -324,7 +324,7 @@ class DefaultRichardson(DirectionalDerivativeBase):
 
     Based on https://doi.org/10.48550/arXiv.2110.04335
 
-    Given some initial step size `h` and some order `n`, terms are
+    Given some step size `h` and some order `n`, terms are
     computed as
 
     .. math::
