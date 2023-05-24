@@ -329,7 +329,7 @@ class DefaultRichardson(DirectionalDerivativeBase):
 
     .. math::
 
-        A_{i,j} = \mathrm{Central\,Difference}\left(\mathrmP{step size}= \frac{h}{2^{i-1}} \right)
+        A_{i,j} = \mathrm{Central\,Difference}\left(\mathrm{step\,size}= \frac{h}{2^{i-1}} \right)
 
     if `j = 1`, and
 
