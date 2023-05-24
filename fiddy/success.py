@@ -104,6 +104,26 @@ class Consistency(Success):
             if success
         ]
 
+        # If only one method was requested, then the above consistency check
+        # does nothing. Instead, we can look for consistency across step sizes.
+        # To reduce the number of comparisons, we just check for consistency
+        # between consecutive step sizes.
+        if len(consistent_results) > 1:
+            consistent_indices = set()
+            for i in range(len(consistent_results) - 1):
+                if np.isclose(
+                    consistent_results[i],
+                    consistent_results[i + 1],
+                    rtol=self.rtol / 2,
+                    atol=self.atol / 2,
+                    equal_nan=self.equal_nan,
+                ).all():
+                    consistent_indices |= {i, i + 1}
+
+            consistent_results = [
+                consistent_results[i] for i in consistent_indices
+            ]
+
         success = False
         value = np.nanmean(np.array(consistent_results), axis=0)
         if consistent_results:
