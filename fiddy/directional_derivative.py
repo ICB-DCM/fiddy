@@ -329,17 +329,17 @@ class DefaultRichardson(DirectionalDerivativeBase):
 
     .. math::
 
-        A_{i,j} = \mathrm{Central Difference(step size=} \frac{h}{2^(i-1)} \mathrm{)}
+        A_{i,j} = \mathrm{Central\,Difference}\left(\mathrmP{step size}= \frac{h}{2^{i-1}} \right)
 
     if `j = 1`, and
 
     .. math::
 
-        A_{i,j} = \frac{4^{j-1} A_{i,j-1} - A_{i-1,j-1}}{4**(j-1) - 1}
+        A_{i,j} = \frac{4^{j-1} A_{i,j-1} - A_{i-1,j-1}}{4^{j-1} - 1}
 
     otherwise.
 
-    The derivative is given by A at i=n, j=n.
+    The derivative is given by `A` at `i=n`, `j=n`.
 
     Some basic caching is used, which is reset when a new derivative is requested.
     """
