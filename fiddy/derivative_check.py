@@ -234,7 +234,8 @@ class HybridDerivativeCheck(DerivativeCheck):
                         if not np.isfinite([fd_range, fd_mean]).all():
                             results.append(None)
                         else:
-                            results.append(True)
+                            result = True
+                        results.append(result)
                 except (IndexError, TypeError):
                     # TODO: Fix this, why does this occur?
                     pass
