@@ -231,12 +231,7 @@ class HybridDerivativeCheck(DerivativeCheck):
                             )  # can't judge consistency / questionable grad approxs
                     else:
                         fd_range = abs(fd_range[1] - fd_range[0])
-                        if math.isinf(
-                            (fd_range)
-                            or math.isnan(fd_range)
-                            or math.isinf(fd_mean)
-                            or math.isnan(fd_mean)
-                        ):
+                        if not np.isfinite([fd_range, fd_mean]).all():
                             results.append(None)
                         else:
                             results.append(True)
