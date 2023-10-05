@@ -77,18 +77,17 @@ class DerivativeCheck(abc.ABC):
     """Check whether a derivative is correct.
 
     Args:
-        derivative:
-            The test derivative.
-        expectation:
-            The expected derivative.
-        point:
-            The point where the test derivative was computed.
-        output_indices:
-            The derivative can be a multi-dimensional object that has dimensions
-            associated with the multiple outputs of a function, and dimensions
-            associated with the derivative of these multiple outputs with respect
-            to multiple directions.
-    """
+    derivative:
+        The test derivative.
+    expectation:
+        The expected derivative.
+    point:
+        The point where the test derivative was computed.
+    output_indices:
+        The derivative can be a multi-dimensional object that has dimensions
+        associated with the multiple outputs of a function, and dimensions
+        associated with the derivative of these multiple outputs with respect
+        to multiple directions."""
 
     method_id: str
     """The name of the derivative check method."""
@@ -164,30 +163,43 @@ class NumpyIsCloseDerivativeCheck(DerivativeCheck):
         return derivative_check_result
 
 
+def get_expected_and_test_values(directional_derivatives):
+    expected_values = []
+    test_values = []
+    for direction_index, directional_derivative in enumerate(
+        directional_derivatives
+    ):
+        test_value = directional_derivative.value
+        test_values.append(test_value)
+
+        expected_value = []
+        for output_index in np.ndindex(self.output_indices):
+            element = self.expectation[output_index][direction_index]
+            expected_value.append(element)
+        expected_value = np.array(expected_value).reshape(test_value.shape)
+        expected_values.append(expected_value)
+
+    return expected_values, test_values
+
+
 class HybridDerivativeCheck(DerivativeCheck):
+    """
+
+    HybridDerivativeCheck.
+    The method checks, if gradients are in finite differences range [min, max],
+    using forward, backward and central finite differences for potential
+    multiple stepsizes eps. If true, gradients will be checked for each
+    parameter and assessed whether or not gradients are within acceptable
+    absolute tolerances.
+    """
+
     method_id = "hybrid"
 
     def method(self, *args, **kwargs):
-        expected_values = []
-        test_values = []
         success = True
-        for direction_index, directional_derivative in enumerate(
+        expected_values, test_values = get_expected_and_test_values(
             self.derivative.directional_derivatives
-        ):
-            test_value = directional_derivative.value
-            test_values.append(test_value)
-
-            expected_value = []
-            for output_index in np.ndindex(self.output_indices):
-                element = self.expectation[output_index][direction_index]
-                expected_value.append(element)
-            expected_value = np.array(expected_value).reshape(test_value.shape)
-            expected_values.append(expected_value)
-
-        # debug
-        assert len(expected_values) == len(
-            test_values
-        ), "Mismatch of step sizes"
+        )
 
         results_all = []
         directional_derivative_check_results = []
@@ -236,8 +248,10 @@ class HybridDerivativeCheck(DerivativeCheck):
                         else:
                             result = True
                         results.append(result)
-                except (IndexError, TypeError):
-                    # TODO: Fix this, why does this occur?
+                except (IndexError, TypeError) as err:
+                    print(
+                        f"Unexpected error encountered: {err} (This should never happen!)"
+                    )
                     pass
 
                 directional_derivative_check_result = (
