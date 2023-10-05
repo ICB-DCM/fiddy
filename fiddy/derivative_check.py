@@ -252,7 +252,6 @@ class HybridDerivativeCheck(DerivativeCheck):
                     print(
                         f"Unexpected error encountered: {err} (This should never happen!)"
                     )
-                    pass
 
                 directional_derivative_check_result = (
                     DirectionalDerivativeCheckResult(
