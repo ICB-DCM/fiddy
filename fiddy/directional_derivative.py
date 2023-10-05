@@ -1,21 +1,13 @@
 import abc
-from typing import Any, Callable, Dict, List, Union, Tuple
 import warnings
+from dataclasses import dataclass, field
+from typing import Any, Callable, Dict, List, Tuple, Union
 
 import numpy as np
-import pandas as pd
-
-from .constants import (
-    MethodId,
-    Type,
-    EPSILON,
-)
-
-from .step import step
 
 from . import directional_derivative
-
-from dataclasses import dataclass, field
+from .constants import EPSILON, MethodId, Type
+from .step import step
 
 
 @dataclass
@@ -65,7 +57,8 @@ class Computer:
             warnings.warn(
                 "Point has no component in this direction. "
                 "Set `Computer.relative_size=False` to avoid this. "
-                f"Using default small step size `fiddy.EPSILON`: {EPSILON}"
+                f"Using default small step size `fiddy.EPSILON`: {EPSILON}",
+                stacklevel=1,
             )
             size = EPSILON
         return size
@@ -100,6 +93,7 @@ class Computer:
 #     direction: Type.DIRECTION
 #     # FIXME support callable
 #     directional_derivative: Type.GRADIENT
+
 
 # TODO do not inherit from computer
 #      define common base class to both?
@@ -217,7 +211,8 @@ class DirectionalDerivativeBase(abc.ABC):
     id: MethodId
 
     def __init__(self, function: Type.FUNCTION):
-        """
+        """Construct.
+
         Args:
             function:
                 The function.
@@ -237,7 +232,7 @@ class DirectionalDerivativeBase(abc.ABC):
             See :func:`__call__`.
 
         Returns:
-            (1) the lesser point, (2) the greater point.
+            The points at which the function will be evaluated.
         """
         raise NotImplementedError
 
@@ -267,6 +262,7 @@ class DirectionalDerivativeBase(abc.ABC):
                 size=size,
             ),
             size=size,
+            direction=direction,
         )
 
     @abc.abstractmethod
@@ -285,7 +281,7 @@ class DirectionalDerivativeBase(abc.ABC):
 class TwoPointSlopeDirectionalDirection(DirectionalDerivativeBase):
     """Derivatives that are similar to a simple `(y1-y0)/h` slope function."""
 
-    def compute(self, points: List[Type.POINT], size: Type.SIZE):
+    def compute(self, points: List[Type.POINT], size: Type.SIZE, **kwargs):
         y0, y1 = self.function(points[0]), self.function(points[1])
         return (y1 - y0) / size
 
@@ -323,12 +319,93 @@ class DefaultCentral(TwoPointSlopeDirectionalDirection):
         return [x0, x1]
 
 
+class DefaultRichardson(DirectionalDerivativeBase):
+    r"""The Richardson extrapolation method.
+
+    Based on https://doi.org/10.48550/arXiv.2110.04335
+
+    Given some step size `h` and some order `n`, terms are
+    computed as
+
+    .. math::
+
+        A_{i,j} = \mathrm{Central\,Difference}\left(\mathrm{step\,size}= \frac{h}{2^{i-1}} \right)
+
+    if `j = 1`, and
+
+    .. math::
+
+        A_{i,j} = \frac{4^{j-1} A_{i,j-1} - A_{i-1,j-1}}{4^{j-1} - 1}
+
+    otherwise.
+
+    The derivative is given by `A` at `i=n`, `j=n`.
+
+    Some basic caching is used, which is reset when a new derivative is requested.
+    """
+
+    id = MethodId.RICHARDSON
+    order = 4
+    # TODO change order to some tolerance?
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+        self.central = DefaultCentral(function=self.function)
+
+        self.reset_cache()
+
+    def reset_cache(self):
+        self.cache = {}
+
+    def get_points(self, point, direction, size):
+        return point
+
+    def get_term(self, i, j, **kwargs):
+        if (i, j) in self.cache:
+            return self.cache[(i, j)]
+
+        if j == 1:
+            size = kwargs["size"] / (2 ** (i - 1))
+            term = self.central(
+                size=size, **{k: v for k, v in kwargs.items() if k != "size"}
+            )
+            self.cache[(i, j)] = term
+            return term
+
+        term = (
+            4 ** (j - 1) * self.get_term(i=i, j=j - 1, **kwargs)
+            - self.get_term(i=i - 1, j=j - 1, **kwargs)
+        ) / (4 ** (j - 1) - 1)
+        self.cache[(i, j)] = term
+        return term
+
+    def compute(
+        self, points: Type.POINT, size: Type.SIZE, direction: Type.DIRECTION
+    ):
+        # TODO refactor to singular point arg name
+        self.reset_cache()
+
+        result = self.get_term(
+            i=self.order,
+            j=self.order,
+            point=points,
+            size=size,
+            direction=direction,
+        )
+
+        self.reset_cache()
+
+        return result
+
+
 methods = {
     method.id: method
     for method in [
         DefaultForward,
         DefaultBackward,
         DefaultCentral,
+        DefaultRichardson,
     ]
 }
 

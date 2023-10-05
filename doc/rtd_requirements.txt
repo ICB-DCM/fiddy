@@ -1,1 +1,2 @@
 petab
+urllib3<2

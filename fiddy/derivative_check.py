@@ -1,34 +1,13 @@
 import abc
 from typing import Any, Callable, Dict, List, Union
 from itertools import chain
-
 from dataclasses import dataclass
 
 import numpy as np
 import pandas as pd
 import math
 
-from .constants import (
-    # TYPE_DIMENSION,
-    # TYPE_FUNCTION,
-    # TYPE_SIZE,
-    # TYPE_OUTPUT,
-    # TYPE_GRADIENT_FUNCTION,
-    MethodId,
-    # AnalysisMethod,
-    Type,
-)
-
-from .directional_derivative import (
-    methods,
-    get_directions,
-    Computer,
-    DirectionalDerivative,
-)
-
-from .step import step
-from .success import Success
-
+from .constants import Type
 from .derivative import Derivative
 
 
@@ -150,9 +129,7 @@ class NumpyIsCloseDerivativeCheck(DerivativeCheck):
                 directional_derivative_check_result
             )
 
-        success = all(
-            [r.success for r in directional_derivative_check_results]
-        )
+        success = all(r.success for r in directional_derivative_check_results)
         derivative_check_result = DerivativeCheckResult(
             method_id=self.method_id,
             directional_derivative_check_results=directional_derivative_check_results,

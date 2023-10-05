@@ -1,24 +1,22 @@
 from functools import partial
 from inspect import signature
-from typing import Any, Callable, Dict, List, Sequence, Tuple, Union
+from typing import Any, Callable, Dict, List, Tuple
 
-import numpy as np
 import amici
-from amici.petab_objective import (
+import amici.petab_objective
+import numpy as np
+import petab
+from amici.petab_objective import (  # RDATAS,
     LLH,
     SLLH,
-    RDATAS,
     create_edatas,
     create_parameter_mapping,
 )
-import amici.petab_objective
-import petab
-from petab.C import PARAMETER_SCALE, LIN, LOG, LOG10
+from petab.C import LIN, LOG, LOG10
 
 from ...constants import Type
 from ...function import CachedFunction
 from ...numpy import fiddy_array
-
 
 LOG_E_10 = np.log(10)
 
@@ -64,9 +62,9 @@ derivative_parameter_dimension = {
     "sx_ss": 0,
     "sy": 1,
     "ssigmay": 1,
-    #'sz'      : ???,
+    # 'sz'      : ???,
     "srz": 2,
-    #'ssigmaz' : ???,
+    # 'ssigmaz' : ???,
     "sllh": 0,
     "s2llh": 1,
     "sres": 1,
@@ -74,12 +72,17 @@ derivative_parameter_dimension = {
 
 
 def rdata_array_transpose(array: np.ndarray, variable: str) -> Tuple[int]:
+    if array.size == 0:
+        return array
     original_parameter_dimension = derivative_parameter_dimension[variable]
-    try:
-        return np.moveaxis(array, original_parameter_dimension, -1)
-    except:
-        breakpoint()
     return np.moveaxis(array, original_parameter_dimension, -1)
+
+
+def fiddy_array_transpose(array: np.ndarray, variable: str) -> Tuple[int]:
+    if array.size == 0:
+        return array
+    original_parameter_dimension = derivative_parameter_dimension[variable]
+    return np.moveaxis(array, -1, original_parameter_dimension)
 
 
 default_derivatives = {
@@ -102,21 +105,21 @@ def rdata_to_array(rdata: amici.AmiciReturnData):
     breakpoint()
 
 
-def output_to_array(output) -> Type.FUNCTION_OUTPUT:
-    """Convert AMICI output to fiddy output.
-
-    Output is expected to be from `amici.petab_objective.simulate_petab`.
-
-    Args:
-        output:
-            The output.
-
-    Returns:
-        The converted output.
-    """
-    condition_results = [rdata_to_array(rdata) for rdata in output[RDATAS]]
-    array = np.array(condition_results)
-    breakpoint()
+# def output_to_array(output) -> Type.FUNCTION_OUTPUT:
+#     """Convert AMICI output to fiddy output.
+#
+#     Output is expected to be from `amici.petab_objective.simulate_petab`.
+#
+#     Args:
+#         output:
+#             The output.
+#
+#     Returns:
+#         The converted output.
+#     """
+#     condition_results = [rdata_to_array(rdata) for rdata in output[RDATAS]]
+#     array = np.array(condition_results)
+#     breakpoint()
 
 
 def run_amici_simulation_to_cached_functions(
@@ -246,13 +249,42 @@ def flatten(arrays: Dict[str, Type.ARRAY]) -> Type.ARRAY:
 
 
 def reshape(
-    array: Type.ARRAY, structure: TYPE_STRUCTURE
+    array: Type.ARRAY,
+    structure: TYPE_STRUCTURE,
+    sensitivities: bool = False,
 ) -> Dict[str, Type.ARRAY]:
-    reshaped_value = {
-        variable: array[start:stop].reshape(shape)
-        for variable, (start, stop, shape) in structure.items()
-    }
-    return reshaped_value
+    reshaped = {}
+    for variable, (start, stop, shape) in structure.items():
+        # array is currently "flattened" w.r.t. fiddy dimensions
+        # hence, if sensis, reshape w.r.t. fiddy dimensions
+        if sensitivities and (
+            dimension0 := derivative_parameter_dimension.get(
+                "s" + variable, False
+            )
+        ):
+            shape = [
+                size
+                for dimension, size in enumerate(shape)
+                if dimension != dimension0
+            ] + [shape[dimension0]]
+
+        array = array[start:stop]
+        if array.size != 0:
+            array = array.reshape(shape)
+
+        # now reshape to AMICI dimensions
+        if sensitivities and (
+            dimension0 := derivative_parameter_dimension.get(
+                "s" + variable, False
+            )
+        ):
+            array = fiddy_array_transpose(
+                array=array,
+                variable="s" + variable,
+            )
+        reshaped[variable] = array
+
+    return reshaped
 
 
 def simulate_petab_to_cached_functions(
@@ -351,10 +383,6 @@ def simulate_petab_to_cached_functions(
             solver=amici_solver,
         )
         return result
-
-    simulate_petab_full_cached = simulate_petab_full
-    if cache:
-        simulate_petab_full_cached = CachedFunction(simulate_petab_full)
 
     def function(point: Type.POINT):
         output = simulate_petab_full(point, order=amici.SensitivityOrder.none)

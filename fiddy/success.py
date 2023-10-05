@@ -3,11 +3,9 @@ from typing import Any, Callable, Union
 
 import numpy as np
 
-
+from . import analysis, directional_derivative
 from .constants import Type
 from .directional_derivative import DirectionalDerivative
-
-from . import directional_derivative, analysis, derivative
 
 
 class Success:
@@ -50,20 +48,20 @@ class Consistency(Success):
         equal_nan: bool = True,
     ):
         super().__init__()
-        if computer_parser is None:
-            computer_parser = (
-                lambda computer, size: computer.value
-                if computer.size == size
-                else None
-            )
-        self.computer_parser = computer_parser
-        if analysis_parser is None:
-            analysis_parser = (
-                lambda analysis: analysis.value
-                if computer.size == size
-                else None
-            )
-        self.analysis_parser = analysis_parser
+        # if computer_parser is None:
+        #     computer_parser = (
+        #         lambda computer, size: computer.value
+        #         if computer.size == size
+        #         else None
+        #     )
+        # self.computer_parser = computer_parser
+        # if analysis_parser is None:
+        #     analysis_parser = (
+        #         lambda analysis: analysis.value
+        #         if computer.size == size
+        #         else None
+        #     )
+        # self.analysis_parser = analysis_parser
 
         self.rtol = rtol
         self.atol = atol
@@ -77,14 +75,15 @@ class Consistency(Success):
         analysis_results = directional_derivative.get_analysis_results()
         results_by_size = {}
         for result in [*computer_results, *analysis_results]:
-            size = result.metadata.get("size", None)
+            size = result.metadata.get("size_absolute", None)
             if size is None:
                 continue
             if size not in results_by_size:
                 results_by_size[size] = {}
             if result.method_id in results_by_size[size]:
                 raise ValueError(
-                    f'Duplicate, and possibly conflicting, results for method "{result.method_id}" and size "{size}".'
+                    f'Duplicate, and possibly conflicting, results for method "{result.method_id}" and size "{size}".',
+                    stacklevel=1,
                 )
             results_by_size[size][result.method_id] = result.value
 

@@ -1,28 +1,17 @@
-import abc
-from typing import Any, Callable, Dict, List, Union
-import warnings
-
-from dataclasses import dataclass
+from typing import Callable, Dict, List, Union
 
 import numpy as np
 import pandas as pd
 
-from .constants import (
-    MethodId,
-    Type,
-    EPSILON,
-)
-
 from .analysis import Analysis
+from .constants import MethodId, Type
 from .directional_derivative import (
-    methods,
-    get_directions,
     Computer,
     DirectionalDerivative,
+    get_directions,
+    methods,
 )
-
 from .success import Success
-
 
 # @dataclass
 # class Analysis:
@@ -125,8 +114,8 @@ class Derivative:
         df.index.rename("direction", inplace=True)
         return df
 
-    def print(self):
-        print(self.df)
+    # def print(self):
+    #     print(self.df)
 
 
 def get_derivative(
