@@ -66,7 +66,8 @@ class DerivativeCheck(abc.ABC):
         The derivative can be a multi-dimensional object that has dimensions
         associated with the multiple outputs of a function, and dimensions
         associated with the derivative of these multiple outputs with respect
-        to multiple directions."""
+        to multiple directions.
+    """
 
     method_id: str
     """The name of the derivative check method."""
@@ -160,9 +161,8 @@ def get_expected_and_test_values(directional_derivatives):
 
 
 class HybridDerivativeCheck(DerivativeCheck):
-    """
+    """HybridDerivativeCheck.
 
-    HybridDerivativeCheck.
     The method checks, if gradients are in finite differences range [min, max],
     using forward, backward and central finite differences for potential
     multiple stepsizes eps. If true, gradients will be checked for each
