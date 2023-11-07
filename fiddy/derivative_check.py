@@ -97,17 +97,20 @@ class NumpyIsCloseDerivativeCheck(DerivativeCheck):
 
     def method(self, *args, **kwargs):
         directional_derivative_check_results = []
-        for direction_index, directional_derivative in enumerate(
+        expected_values, test_values = get_expected_and_test_values(
             self.derivative.directional_derivatives
-        ):
-            test_value = directional_derivative.value
+        )
 
-            expected_value = []
-            for output_index in np.ndindex(self.output_indices):
-                element = self.expectation[output_index][direction_index]
-                expected_value.append(element)
-            expected_value = np.array(expected_value).reshape(test_value.shape)
-
+        for (
+            direction_index,
+            directional_derivative,
+            expected_value,
+            test_value,
+        ) in enumerate(zip(
+            self.derivative.directional_derivatives,
+            expected_values,
+            test_values,
+        )):
             test_result = np.isclose(
                 test_value,
                 expected_value,
