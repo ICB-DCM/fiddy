@@ -56,17 +56,17 @@ class DerivativeCheck(abc.ABC):
     """Check whether a derivative is correct.
 
     Args:
-    derivative:
-        The test derivative.
-    expectation:
-        The expected derivative.
-    point:
-        The point where the test derivative was computed.
-    output_indices:
-        The derivative can be a multi-dimensional object that has dimensions
-        associated with the multiple outputs of a function, and dimensions
-        associated with the derivative of these multiple outputs with respect
-        to multiple directions.
+        derivative:
+            The test derivative.
+        expectation:
+            The expected derivative.
+        point:
+            The point where the test derivative was computed.
+        output_indices:
+            The derivative can be a multi-dimensional object that has dimensions
+            associated with the multiple outputs of a function, and dimensions
+            associated with the derivative of these multiple outputs with respect
+            to multiple directions.
     """
 
     method_id: str
