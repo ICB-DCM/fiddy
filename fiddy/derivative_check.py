@@ -216,7 +216,7 @@ class HybridDerivativeCheck(DerivativeCheck):
                                 abs(grad_mean - fd_mean)
                                 / abs(fd_range + np.finfo(float).eps)
                             ) > kwargs["rtol"]:
-                            results.append(False)
+                        results.append(False)
                         else:
                             results.append(
                                 None
