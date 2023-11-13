@@ -5,11 +5,16 @@ import pytest
 from more_itertools import one
 from scipy.optimize import rosen, rosen_der
 
-from fiddy import MethodId, get_derivative, methods
-from fiddy.analysis import ApproximateCentral
 from fiddy.derivative import Computer
 from fiddy.derivative_check import NumpyIsCloseDerivativeCheck
+from fiddy import MethodId, get_derivative, methods
+from fiddy.analysis import ApproximateCentral
 from fiddy.success import Consistency
+from fiddy.derivative_check import (
+    NumpyIsCloseDerivativeCheck,
+    HybridDerivativeCheck,
+)
+
 
 RTOL = 1e-2
 ATOL = 1e-15
@@ -106,7 +111,7 @@ def test_get_derivative(point, sizes, output_shape):
         # FIXME default?
         sizes=[1e-10, 1e-5],
         # FIXME default?
-        method_ids=[MethodId.FORWARD, MethodId.BACKWARD],
+        method_ids=[MethodId.FORWARD, MethodId.BACKWARD, MethodId.CENTRAL],
         # FIXME default?
         analysis_classes=[ApproximateCentral],
         # FIXME default? not just "True" ...
@@ -119,7 +124,55 @@ def test_get_derivative(point, sizes, output_shape):
         expectation=expected_value,
         point=point,
     )
-    result = check(rtol=1e-2)
+    result = check(rtol=1e-2, atol=1e-3)
+    assert result.success
+
+
+@pytest.mark.parametrize(
+    "point, sizes, output_shape",
+    [
+        (np.array(point), sizes, output_shape)
+        for point in [
+            (1, 0, 0),
+            (0.9, 0.1, 0.2, 0.4),
+        ]
+        for sizes in [
+            [1e-10, 1e-5],
+        ]
+        for output_shape in [
+            (1,),
+            (1, 2),
+            (5, 3, 6, 2, 4),
+        ]
+    ],
+)
+def test_get_derivative_hybrid(point, sizes, output_shape):
+    function = partial(rosenbrock, output_shape=output_shape)
+    expected_derivative_function = partial(
+        rosenbrock_der, output_shape=output_shape
+    )
+    derivative = get_derivative(
+        function=function,
+        point=point,
+        # FIXME default?
+        sizes=[1e-10, 1e-5],
+        # FIXME default?
+        method_ids=[MethodId.FORWARD, MethodId.BACKWARD, MethodId.CENTRAL],
+        # FIXME default?
+        analysis_classes=[ApproximateCentral],
+        # FIXME default? not just "True" ...
+        success_checker=Consistency(),
+    )
+    test_value = derivative.value
+    expected_value = expected_derivative_function(point)
+
+    check = HybridDerivativeCheck(
+        derivative=derivative,
+        expectation=expected_value,
+        point=point,
+    )
+    # based on given tolerances, hybrid gradient check should not fail
+    result = check(rtol=1e-2, atol=1e-3)
     assert result.success
 
 
