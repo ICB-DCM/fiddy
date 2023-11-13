@@ -74,8 +74,9 @@ jobs:
     - name: Install dependencies
       run: pip install tox pre-commit
 
-    - name: Check repository size
-      run: tox -e size
+# failing on github, no size environment in tox.ini
+#    - name: Check repository size
+#      run: tox -e size
 
     - name: Run quality checks
       timeout-minutes: 5
