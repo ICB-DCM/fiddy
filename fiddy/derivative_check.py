@@ -171,6 +171,8 @@ class HybridDerivativeCheck(DerivativeCheck):
     multiple stepsizes eps. If true, gradients will be checked for each
     parameter and assessed whether or not gradients are within acceptable
     absolute tolerances.
+    .. math::
+        \\frac{|\\mu - \\kappa|}{\\lambda} < \\epsilon
     """
 
     method_id = "hybrid"
@@ -214,9 +216,7 @@ class HybridDerivativeCheck(DerivativeCheck):
                                 abs(grad_mean - fd_mean)
                                 / abs(fd_range + np.finfo(float).eps)
                             ) > kwargs["rtol"]:
-                                results.append(False)
-                            else:
-                                results.append(False)
+                            results.append(False)
                         else:
                             results.append(
                                 None
