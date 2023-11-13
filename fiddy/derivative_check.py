@@ -229,9 +229,9 @@ class HybridDerivativeCheck(DerivativeCheck):
                             result = True
                         results.append(result)
                 except (IndexError, TypeError) as err:
-                    print(
-                        f"Unexpected error encountered: {err} (This should never happen!)"
-                    )
+                    raise ValueError(
+                        f"Unexpected error encountered (This should never happen!)"
+                    ) from err
 
                 directional_derivative_check_result = (
                     DirectionalDerivativeCheckResult(
