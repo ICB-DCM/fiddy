@@ -5,14 +5,14 @@ from typing import Any, Callable, Dict, List, Tuple
 import amici
 import amici.petab_objective
 import numpy as np
-import petab
+import petab.v1 as petab
 from amici.petab_objective import (  # RDATAS,
     LLH,
     SLLH,
     create_edatas,
     create_parameter_mapping,
 )
-from petab.C import LIN, LOG, LOG10
+from petab.v1.C import LIN, LOG, LOG10
 
 from ...constants import Type
 from ...function import CachedFunction
