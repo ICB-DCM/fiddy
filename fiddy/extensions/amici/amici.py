@@ -3,15 +3,12 @@ from inspect import signature
 from typing import Any, Callable, Dict, List, Tuple
 
 import amici
-import amici.petab_objective
+import amici.petab.simulations
 import numpy as np
 import petab.v1 as petab
-from amici.petab_objective import (  # RDATAS,
-    LLH,
-    SLLH,
-    create_edatas,
-    create_parameter_mapping,
-)
+from amici.petab.parameter_mapping import create_parameter_mapping
+from amici.petab.simulations import LLH, SLLH
+from amici.petab.conditions import create_edatas
 from petab.v1.C import LIN, LOG, LOG10
 
 from ...constants import Type
@@ -331,7 +328,7 @@ def simulate_petab_to_cached_functions(
         parameter_ids = list(petab_problem.parameter_df.index)
 
     if simulate_petab is None:
-        simulate_petab = amici.petab_objective.simulate_petab
+        simulate_petab = amici.petab.simulations.simulate_petab
 
     edatas = None
     if precreate_edatas:
@@ -391,6 +388,9 @@ def simulate_petab_to_cached_functions(
 
     def derivative(point: Type.POINT) -> Type.POINT:
         result = simulate_petab_full(point, order=amici.SensitivityOrder.first)
+        if result[SLLH] is None:
+            raise RuntimeError("Simulation failed.")
+
         sllh = np.array(
             [result[SLLH][parameter_id] for parameter_id in parameter_ids]
         )
