@@ -60,7 +60,10 @@ templates_path = ["_templates"]
 exclude_patterns = ["_build", "Thumbs.db", ".DS_Store"]
 
 
-autodoc_mock_imports = ["amici", "amici.amici", "amici.petab_objective"]
+autodoc_mock_imports = [
+    "amici", "amici.amici", "amici.petab", "amici.petab.simulations",
+    "amici.petab.parameter_mapping", "amici.petab.conditions"
+]
 for mod_name in autodoc_mock_imports:
     sys.modules[mod_name] = mock.MagicMock()
 
