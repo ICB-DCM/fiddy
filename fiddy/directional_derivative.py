@@ -341,17 +341,37 @@ class DefaultRichardson(DirectionalDerivativeBase):
 
     The derivative is given by `A` at `i=n`, `j=n`.
 
-    Some basic caching is used, which is reset when a new derivative is requested.
+    Some basic caching is used, which is reset when a new derivative is
+    requested.
+
+    We also implement an adaptive method, that continues evaluating derivatives
+    at increasing `n` values until consecutive derivative values are within
+    the relative or absolute tolerances. The adaptive method is enabled if
+    `order = None`.
     """
 
     id = MethodId.RICHARDSON
-    order = 4
     # TODO change order to some tolerance?
 
-    def __init__(self, *args, **kwargs):
+    def __init__(
+        self,
+        *args,
+        rtol: float = 1e-2,
+        atol: float = 1e-4,
+        order: int = None,
+        max_order: int = 100,
+        equal_nan: bool = True,
+        **kwargs,
+    ):
         super().__init__(*args, **kwargs)
 
         self.central = DefaultCentral(function=self.function)
+
+        self.order = order
+        self.max_order = max_order
+        self.rtol = rtol
+        self.atol = atol
+        self.equal_nan = equal_nan
 
         self.reset_cache()
 
@@ -386,17 +406,51 @@ class DefaultRichardson(DirectionalDerivativeBase):
         # TODO refactor to singular point arg name
         self.reset_cache()
 
-        result = self.get_term(
-            i=self.order,
-            j=self.order,
-            point=points,
-            size=size,
-            direction=direction,
-        )
+        if self.order is not None:
+            result = self.get_term(
+                i=self.order,
+                j=self.order,
+                point=points,
+                size=size,
+                direction=direction,
+            )
+
+            self.reset_cache()
+            return result
+
+        order = 0
+        result0 = None
+        while order < self.max_order:
+            order += 1
+            result = self.get_term(
+                i=order,
+                j=order,
+                point=points,
+                size=size,
+                direction=direction,
+            )
+
+            if result0 is None:
+                result0 = result
+                continue
+
+            if np.isclose(
+                result,
+                result0,
+                rtol=self.rtol,
+                atol=self.atol,
+                equal_nan=self.equal_nan,
+            ).all():
+                break
+        else:
+            raise ValueError(
+                f"Richardson method: max order `{self.max_order}` was reached "
+                f"before consistent results were found within "
+                f"`rtol={self.rtol}` and `atol={self.atol}`."
+            )
 
         self.reset_cache()
-
-        return result
+        return result0
 
 
 methods = {
