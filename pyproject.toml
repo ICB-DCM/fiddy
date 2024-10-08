@@ -5,5 +5,28 @@ requires = [
 ]
 build-backend = "setuptools.build_meta"
 
-[tool.black]
+[tool.ruff]
 line-length = 79
+lint.select = [
+    "F",  # Pyflakes
+    "I",  # isort
+    # "D",  # pydocstyle (PEP 257)  FIXME enable later
+    "S",  # flake8-bandit
+    "B",  # flake8-bugbear
+    "C4",  # flake8-comprehensions
+    "T20",  # flake8-print
+    "W",  # pycodestyle Warnings
+    "E",  # pycodestyle Errors
+    "UP",  # pyupgrade
+    # "ANN",  # flakes-annotations
+]
+lint.ignore = [
+    "S101", # Use of assert detected
+    # FIXME
+    "E501", # Line too long
+    "T201", # print statement
+    "F403", # star import
+    "F401", # unused import
+]
+[tool.ruff.lint.pydocstyle]
+convention = "pep257"
