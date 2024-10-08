@@ -142,9 +142,9 @@ def test_get_derivative_relative():
     )  # cardinal direction, simplifies to this, but usually need dot product
 
     g_a = (f_a - f_0) / size
-    g_r = (f_r - f_0) / (
-        point * direction * size
-    ).sum()  # cardinal direction, simplifies to this, but usually need dot product
+    g_r = (
+        (f_r - f_0) / (point * direction * size).sum()
+    )  # cardinal direction, simplifies to this, but usually need dot product
 
     # Fiddy finite difference derivatives
     kwargs = {
