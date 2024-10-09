@@ -81,8 +81,8 @@ class Consistency(Success):
                 results_by_size[size] = {}
             if result.method_id in results_by_size[size]:
                 raise ValueError(
-                    f'Duplicate, and possibly conflicting, results for method "{result.method_id}" and size "{size}".',
-                    stacklevel=1,
+                    f"Duplicate, and possibly conflicting, results for method "
+                    f'"{result.method_id}" and size "{size}".',
                 )
             results_by_size[size][result.method_id] = result.value
 
