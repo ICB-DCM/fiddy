@@ -47,6 +47,8 @@ class DerivativeCheckResult:
         df = pd.DataFrame(self.directional_derivative_check_results)
         # FIXME string literal
         df.set_index("direction_id", inplace=True)
+        df["abs_diff"] = np.abs(df["expectation"] - df["test"])
+        df["rel_diff"] = df["abs_diff"] / np.abs(df["expectation"])
         return df
 
 
@@ -98,7 +100,7 @@ class NumpyIsCloseDerivativeCheck(DerivativeCheck):
         for direction_index, directional_derivative in enumerate(
             self.derivative.directional_derivatives
         ):
-            test_value = directional_derivative.value
+            test_value = np.asarray(directional_derivative.value)
 
             expected_value = []
             for output_index in np.ndindex(self.output_indices):
@@ -112,7 +114,6 @@ class NumpyIsCloseDerivativeCheck(DerivativeCheck):
                 *args,
                 **kwargs,
             )
-
             directional_derivative_check_result = (
                 DirectionalDerivativeCheckResult(
                     direction_id=directional_derivative.id,
