@@ -1,6 +1,7 @@
+from collections.abc import Callable
 from functools import partial
 from inspect import signature
-from typing import Any, Callable, Dict, List, Tuple
+from typing import Any
 
 import amici
 import amici.petab.simulations
@@ -68,14 +69,14 @@ derivative_parameter_dimension = {
 }
 
 
-def rdata_array_transpose(array: np.ndarray, variable: str) -> Tuple[int]:
+def rdata_array_transpose(array: np.ndarray, variable: str) -> tuple[int]:
     if array.size == 0:
         return array
     original_parameter_dimension = derivative_parameter_dimension[variable]
     return np.moveaxis(array, original_parameter_dimension, -1)
 
 
-def fiddy_array_transpose(array: np.ndarray, variable: str) -> Tuple[int]:
+def fiddy_array_transpose(array: np.ndarray, variable: str) -> tuple[int]:
     if array.size == 0:
         return array
     original_parameter_dimension = derivative_parameter_dimension[variable]
@@ -123,11 +124,11 @@ def run_amici_simulation_to_cached_functions(
     amici_model: amici.AmiciModel,
     *args,
     cache: bool = True,
-    output_keys: List[str] = None,
-    parameter_ids: List[str] = None,
+    output_keys: list[str] = None,
+    parameter_ids: list[str] = None,
     amici_solver: amici.AmiciSolver = None,
     amici_edata: amici.AmiciExpData = None,
-    derivative_variables: List[str] = None,
+    derivative_variables: list[str] = None,
     **kwargs,
 ):
     """Convert `amici.runAmiciSimulation` to fiddy functions.
@@ -156,7 +157,7 @@ def run_amici_simulation_to_cached_functions(
         }
 
     def run_amici_simulation(point: Type.POINT, order: amici.SensitivityOrder):
-        problem_parameters = dict(zip(parameter_ids, point))
+        problem_parameters = dict(zip(parameter_ids, point, strict=False))
         amici_model.setParameterById(problem_parameters)
         amici_solver.setSensitivityOrder(order)
         rdata = amici.runAmiciSimulation(
@@ -237,10 +238,10 @@ def run_amici_simulation_to_cached_functions(
 
 
 # (start, stop, shape)
-TYPE_STRUCTURE = Tuple[int, int, Tuple[int, ...]]
+TYPE_STRUCTURE = tuple[int, int, tuple[int, ...]]
 
 
-def flatten(arrays: Dict[str, Type.ARRAY]) -> Type.ARRAY:
+def flatten(arrays: dict[str, Type.ARRAY]) -> Type.ARRAY:
     flattened_value = np.concatenate([array.flat for array in arrays.values()])
     return flattened_value
 
@@ -249,7 +250,7 @@ def reshape(
     array: Type.ARRAY,
     structure: TYPE_STRUCTURE,
     sensitivities: bool = False,
-) -> Dict[str, Type.ARRAY]:
+) -> dict[str, Type.ARRAY]:
     reshaped = {}
     for variable, (start, stop, shape) in structure.items():
         # array is currently "flattened" w.r.t. fiddy dimensions
@@ -287,13 +288,13 @@ def reshape(
 def simulate_petab_to_cached_functions(
     petab_problem: petab.Problem,
     amici_model: amici.Model,
-    parameter_ids: List[str] = None,
+    parameter_ids: list[str] = None,
     cache: bool = True,
     precreate_edatas: bool = True,
     precreate_parameter_mapping: bool = True,
     simulate_petab: Callable[[Any], str] = None,
     **kwargs,
-) -> Tuple[Type.FUNCTION, Type.FUNCTION]:
+) -> tuple[Type.FUNCTION, Type.FUNCTION]:
     r"""Convert `amici.petab_objective.simulate_petab` to fiddy functions.
 
     Note that all gradients are provided on linear scale. The correction from
@@ -373,7 +374,7 @@ def simulate_petab_to_cached_functions(
     )
 
     def simulate_petab_full(point: Type.POINT, order: amici.SensitivityOrder):
-        problem_parameters = dict(zip(parameter_ids, point))
+        problem_parameters = dict(zip(parameter_ids, point, strict=True))
         amici_solver.setSensitivityOrder(order)
         result = simulate_petab_partial(
             problem_parameters=problem_parameters,

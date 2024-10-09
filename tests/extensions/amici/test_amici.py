@@ -138,6 +138,7 @@ def test_simulate_petab_to_functions(problem_generator, scaled_parameters):
                         zip(
                             petab_problem.parameter_df.index,
                             point,
+                            strict=True,
                         )
                     )
                 ).values()

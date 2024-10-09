@@ -1,6 +1,6 @@
 import abc
 from dataclasses import dataclass
-from typing import Any, Dict, List
+from typing import Any
 
 import numpy as np
 import pandas as pd
@@ -21,7 +21,7 @@ class DirectionalDerivativeCheckResult:
     """The expected value."""
     success: bool
     """Whether the check passed."""
-    output: Dict[str, Any] = None
+    output: dict[str, Any] = None
     """Miscellaneous output from the method."""
 
 
@@ -29,7 +29,7 @@ class DirectionalDerivativeCheckResult:
 class DerivativeCheckResult:
     method_id: str
     """The method that determined whether the directional derivative is correct."""
-    directional_derivative_check_results: List[
+    directional_derivative_check_results: list[
         DirectionalDerivativeCheckResult
     ]
     """The results from checking individual directions."""
@@ -39,7 +39,7 @@ class DerivativeCheckResult:
     """The expected value."""
     success: bool
     """Whether the check passed."""
-    output: Dict[str, Any] = None
+    output: dict[str, Any] = None
     """Miscellaneous output from the method."""
 
     @property
