@@ -1,9 +1,43 @@
 [build-system]
-requires = [
-    "setuptools>=42",
-    "wheel"
-]
+requires = ["setuptools>=64", "setuptools-scm>=8"]
 build-backend = "setuptools.build_meta"
+
+[project]
+name = "fiddy"
+description = "Finite difference methods"
+readme = "README.md"
+dynamic = ["version"]
+license = { file = "LICENSE" }
+authors = [
+    { name = "The fiddy developers", email = "dilan.pathirana@uni-bonn.de" }
+]
+keywords = ["finite difference", "gradient check", "difference quotient"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "License :: OSI Approved :: BSD License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.10",
+]
+dependencies = [
+    "joblib",
+    "numpy",
+    "pandas"
+]
+requires-python = ">=3.10"
+
+[project.urls]
+Homepage = "https://github.com/icb-dcm/fiddy"
+Documentation = "https://fiddy.readthedocs.io"
+Repository = "https://github.com/icb-dcm/fiddy"
+"Bug Tracker" = "https://github.com/icb-dcm/fiddy/issues"
+
+[tool.setuptools.packages.find]
+include = ["fiddy*"]
+
+[tool.setuptools_scm]
 
 [tool.ruff]
 line-length = 79
