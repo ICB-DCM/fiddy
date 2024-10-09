@@ -54,7 +54,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        python-version: ['3.11']
+        python-version: ['3.12']
 
     steps:
     - name: Check out repository
@@ -74,23 +74,18 @@ jobs:
     - name: Install dependencies
       run: pip install tox pre-commit
 
-# failing on github, no size environment in tox.ini
-#    - name: Check repository size
-#      run: tox -e size
-
     - name: Run quality checks
       timeout-minutes: 5
-      run: tox -e pyroma,flake8
+      run: tox -e pyroma
 
-# failing on github
-#    - name: Run pre-commit hooks
-#      run: pre-commit run --all-files
+    - name: Run pre-commit hooks
+      run: pre-commit run --all-files
 
   docs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        python-version: ['3.11']
+        python-version: ['3.12']
 
     steps:
     - name: Check out repository

@@ -45,6 +45,7 @@ class Derivative:
         success:
             Whether the derivative was successfully computed.
     """
+
     hide_columns = [
         "pending_computers",
         "computers",

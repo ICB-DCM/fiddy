@@ -6,9 +6,9 @@ import amici
 import amici.petab.simulations
 import numpy as np
 import petab.v1 as petab
+from amici.petab.conditions import create_edatas
 from amici.petab.parameter_mapping import create_parameter_mapping
 from amici.petab.simulations import LLH, SLLH
-from amici.petab.conditions import create_edatas
 from petab.v1.C import LIN, LOG, LOG10
 
 from ...constants import Type
