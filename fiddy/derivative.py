@@ -132,7 +132,7 @@ def get_derivative(
     # TODO change to class that can be initialized with.. directional_derivative object?
     success_checker: Success,
     *args,
-    analysis_classes: list[Analysis] = None,
+    analysis_classes: list[type[Analysis]] = None,
     relative_sizes: bool = False,
     directions: list[Type.DIRECTION] | dict[str, Type.DIRECTION] = None,
     direction_ids: list[str] = None,

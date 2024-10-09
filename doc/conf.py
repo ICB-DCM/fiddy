@@ -36,6 +36,10 @@ extensions = [
     "sphinx.ext.napoleon",
     #    "sphinx_autodoc_typehints",  # FIXME fails
     "sphinx.ext.intersphinx",
+    "sphinx.ext.mathjax",
+    "nbsphinx",
+    "IPython.sphinxext.ipython_console_highlighting",
+    "recommonmark",
 ]
 
 intersphinx_mapping = {
@@ -43,6 +47,7 @@ intersphinx_mapping = {
     "pandas": ("https://pandas.pydata.org/docs/", None),
     "numpy": ("https://numpy.org/devdocs/", None),
     "python": ("https://docs.python.org/3", None),
+    "amici": ("https://amici.readthedocs.io/en/latest/", None),
 }
 
 # sphinx-autodoc-typehints
