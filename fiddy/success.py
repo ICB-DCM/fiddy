@@ -1,5 +1,6 @@
 import abc
-from typing import Any, Callable, Union
+from collections.abc import Callable
+from typing import Any, Union
 
 import numpy as np
 
@@ -38,11 +39,9 @@ class Consistency(Success):
     def __init__(
         self,
         computer_parser: Callable[
-            ["directional_derivative.Computer"], Union[float, None]
+            ["directional_derivative.Computer"], float | None
         ] = None,
-        analysis_parser: Callable[
-            ["analysis.Analysis"], Union[float, None]
-        ] = None,
+        analysis_parser: Callable[["analysis.Analysis"], float | None] = None,
         rtol: float = 0.2,
         atol: float = 1e-15,
         equal_nan: bool = True,

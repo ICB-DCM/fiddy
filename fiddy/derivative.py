@@ -1,4 +1,4 @@
-from typing import Callable, Dict, List, Union
+from collections.abc import Callable
 
 import numpy as np
 import pandas as pd
@@ -59,7 +59,7 @@ class Derivative:
     def __init__(
         self,
         # function: TYPE_FUNCTION,
-        directional_derivatives: List[DirectionalDerivative],
+        directional_derivatives: list[DirectionalDerivative],
         autorun: bool = True,
         # custom_methods: Dict[str, TYPE_FUNCTION] = None,
     ):
@@ -124,21 +124,21 @@ def get_derivative(
     point: Type.POINT,
     # TODO store these defaults in some dictionary that a user can easily modify
     # TODO Default to some list e.g. [1e-3, 1e-5]
-    sizes: List[Type.SIZE],
+    sizes: list[Type.SIZE],
     # TODO Default to e.g. ["forward", "backward", "central"]
-    method_ids: List[Union[str, MethodId]],
+    method_ids: list[str | MethodId],
     # TODO for gradient check; add support for methods
     # TODO add some default consistency check
     # TODO change to class that can be initialized with.. directional_derivative object?
     success_checker: Success,
     *args,
-    analysis_classes: List[Analysis] = None,
+    analysis_classes: list[Analysis] = None,
     relative_sizes: bool = False,
-    directions: Union[List[Type.DIRECTION], Dict[str, Type.DIRECTION]] = None,
-    direction_ids: List[str] = None,
-    direction_indices: List[int] = None,
-    custom_methods: Dict[str, Callable] = None,
-    expected_result: List[Type.SCALAR] = None,
+    directions: list[Type.DIRECTION] | dict[str, Type.DIRECTION] = None,
+    direction_ids: list[str] = None,
+    direction_indices: list[int] = None,
+    custom_methods: dict[str, Callable] = None,
+    expected_result: list[Type.SCALAR] = None,
     **kwargs,
 ):
     """Get a derivative.
@@ -171,7 +171,7 @@ def get_derivative(
     if analysis_classes is None:
         analysis_classes = []
     directional_derivatives = []
-    for direction_id, direction in zip(direction_ids, directions):
+    for direction_id, direction in zip(direction_ids, directions, strict=True):
         computers = []
         for size in sizes:
             for method_id in method_ids:

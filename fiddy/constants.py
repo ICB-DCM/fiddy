@@ -1,5 +1,6 @@
+from collections.abc import Callable
 from enum import Enum
-from typing import Any, Callable, Union
+from typing import Any, Union
 
 import numpy as np
 from numpy.typing import NDArray
@@ -32,7 +33,7 @@ class Type:
     #      - "ANALYSE_DIRECTIONAL_DERIVATIVE_METHOD" and
     #      - "ANALYSE_DERIVATIVE_METHOD" and
     ANALYSIS_METHOD = Callable[["DirectionalDerivative"], Any]  # noqa: F821
-    SUCCESS_CHECKER = Callable[["Derivative"], Union[bool, Any]]  # noqa: F821
+    SUCCESS_CHECKER = Callable[["Derivative"], bool | Any]  # noqa: F821
 
 
 # FIXME rename, since this can be the name of the base class in `derivative.py`

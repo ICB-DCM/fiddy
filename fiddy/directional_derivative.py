@@ -1,7 +1,8 @@
 import abc
 import warnings
+from collections.abc import Callable
 from dataclasses import dataclass, field
-from typing import Any, Callable, Dict, List, Tuple, Union
+from typing import Any
 
 import numpy as np
 
@@ -14,7 +15,7 @@ from .step import step
 class ComputerResult:
     method_id: str
     value: Type.DIRECTIONAL_DERIVATIVE
-    metadata: Dict[str, Any] = field(default_factory=dict)
+    metadata: dict[str, Any] = field(default_factory=dict)
 
 
 @dataclass
@@ -26,11 +27,11 @@ class Computer:
     # FIXME support callable
     size: Type.SIZE
     # Change to callable?
-    method: Union[Type.DIRECTIONAL_DERIVATIVE_FUNCTION, MethodId]
+    method: Type.DIRECTIONAL_DERIVATIVE_FUNCTION | MethodId
     function: Type.FUNCTION
     autorun: bool = True
     completed: bool = False
-    results: List[ComputerResult] = field(default_factory=list)
+    results: list[ComputerResult] = field(default_factory=list)
     # value: Type.DIRECTIONAL_DERIVATIVE = None
     relative_size: bool = False
 
@@ -130,10 +131,10 @@ class DirectionalDerivative:
     id: str
     direction: Type.DIRECTION
     # FIXME rename to just computers
-    pending_computers: List[Computer]
-    computers: List[Computer]
+    pending_computers: list[Computer]
+    computers: list[Computer]
     # TODO change to `analysis.Analysis` instead of `Type.ANALYSIS_METHOD`
-    analyses: List[Type.ANALYSIS_METHOD]
+    analyses: list[Type.ANALYSIS_METHOD]
     # A method that acts on the information in the direction result,
     # including gradient approximation values and post-processing results,
     # to determine whether the gradient was computed successfully.
@@ -266,7 +267,7 @@ class DirectionalDerivativeBase(abc.ABC):
         )
 
     @abc.abstractmethod
-    def compute(self, points: List[Type.POINT]):
+    def compute(self, points: list[Type.POINT]):
         """Compute the directional derivative.
 
         Args:
@@ -281,7 +282,7 @@ class DirectionalDerivativeBase(abc.ABC):
 class TwoPointSlopeDirectionalDirection(DirectionalDerivativeBase):
     """Derivatives that are similar to a simple `(y1-y0)/h` slope function."""
 
-    def compute(self, points: List[Type.POINT], size: Type.SIZE, **kwargs):
+    def compute(self, points: list[Type.POINT], size: Type.SIZE, **kwargs):
         y0, y1 = self.function(points[0]), self.function(points[1])
         return (y1 - y0) / size
 
@@ -410,7 +411,7 @@ methods = {
 }
 
 
-def standard_basis(point: Type.POINT) -> List[Type.DIRECTION]:
+def standard_basis(point: Type.POINT) -> list[Type.DIRECTION]:
     """Get standard basis (Cartesian/one-hot) vectors.
 
     Args:
@@ -425,10 +426,10 @@ def standard_basis(point: Type.POINT) -> List[Type.DIRECTION]:
 
 def get_directions(
     point: Type.POINT = None,
-    directions: Union[List[Type.DIRECTION], Dict[str, Type.DIRECTION]] = None,
-    ids: List[str] = None,
-    indices: List[int] = None,
-) -> Tuple[str, Type.DIRECTION]:
+    directions: list[Type.DIRECTION] | dict[str, Type.DIRECTION] = None,
+    ids: list[str] = None,
+    indices: list[int] = None,
+) -> tuple[str, Type.DIRECTION]:
     """Get directions from minimal information.
 
     Args:
