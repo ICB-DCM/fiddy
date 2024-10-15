@@ -5,6 +5,8 @@ Welcome to fiddy's documentation!
    :maxdepth: 2
    :caption: Contents:
 
+   about
+   examples/derivative
    modules
 
 Indices and tables
