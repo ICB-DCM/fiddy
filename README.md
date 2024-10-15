@@ -25,7 +25,7 @@ Currently under development, please install from source.
 pip install -e .
 ```
 
-Can also be installed from [PyPI](https://pypi.org/project/fiddy/0.0.1/)
+Can also be installed from [PyPI](https://pypi.org/project/fiddy/)
 ```bash
 pip install fiddy
 ```
