@@ -14,7 +14,6 @@ authors = [
 keywords = ["finite difference", "gradient check", "difference quotient"]
 classifiers = [
     "Development Status :: 4 - Beta",
-    "BSD-3-Clause",
     "Operating System :: OS Independent",
     "Programming Language :: Python",
     "Programming Language :: Python :: 3.12",
