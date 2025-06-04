@@ -7,6 +7,7 @@ name = "fiddy"
 description = "Finite difference methods"
 readme = "README.md"
 dynamic = ["version", "optional-dependencies"]
+license = "BSD-3-Clause"
 license-files = ["LICENSE"]
 authors = [
     { name = "The fiddy developers", email = "dilan.pathirana@uni-bonn.de" }
