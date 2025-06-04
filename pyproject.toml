@@ -7,14 +7,14 @@ name = "fiddy"
 description = "Finite difference methods"
 readme = "README.md"
 dynamic = ["version", "optional-dependencies"]
-license = { file = "LICENSE" }
+license-files = ["LICENSE"]
 authors = [
     { name = "The fiddy developers", email = "dilan.pathirana@uni-bonn.de" }
 ]
 keywords = ["finite difference", "gradient check", "difference quotient"]
 classifiers = [
     "Development Status :: 4 - Beta",
-    "License :: OSI Approved :: BSD License",
+    "BSD-3-Clause",
     "Operating System :: OS Independent",
     "Programming Language :: Python",
     "Programming Language :: Python :: 3.12",
