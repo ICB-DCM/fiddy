@@ -84,14 +84,6 @@ fiddy.success module
    :undoc-members:
    :show-inheritance:
 
-fiddy.version module
---------------------
-
-.. automodule:: fiddy.version
-   :members:
-   :undoc-members:
-   :show-inheritance:
-
 Module contents
 ---------------
 
