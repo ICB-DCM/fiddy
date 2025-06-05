@@ -74,9 +74,10 @@ jobs:
     - name: Install dependencies
       run: pip install tox pre-commit
 
-    - name: Run quality checks
-      timeout-minutes: 5
-      run: tox -e pyroma
+# Disables until https://github.com/regebro/pyroma/issues/93 is fixed
+#    - name: Run quality checks
+#      timeout-minutes: 5
+#      run: tox -e pyroma
 
     - name: Run pre-commit hooks
       run: pre-commit run --all-files
