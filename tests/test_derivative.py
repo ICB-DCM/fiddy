@@ -21,14 +21,14 @@ ATOL = 1e-15
 
 
 def rosenbrock(input_value, output_shape):
-    size = np.product(output_shape)
+    size = np.prod(output_shape)
     values = [rosen(input_value + i * 0.01) for i in range(size)]
     output = np.array(values).reshape(output_shape)
     return output
 
 
 def rosenbrock_der(input_value, output_shape):
-    size = np.product(output_shape)
+    size = np.prod(output_shape)
     input_shape = input_value.shape
     values = [rosen_der(input_value + i * 0.01) for i in range(size)]
     # The input shape is the "deepest" dimension(s), i.e. expect
@@ -195,9 +195,9 @@ def test_get_derivative_relative():
     )  # cardinal direction, simplifies to this, but usually need dot product
 
     g_a = (f_a - f_0) / size
-    g_r = (f_r - f_0) / (
-        point * direction * size
-    ).sum()  # cardinal direction, simplifies to this, but usually need dot product
+    g_r = (
+        (f_r - f_0) / (point * direction * size).sum()
+    )  # cardinal direction, simplifies to this, but usually need dot product
 
     # Fiddy finite difference derivatives
     kwargs = {

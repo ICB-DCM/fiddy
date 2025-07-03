@@ -2,6 +2,8 @@ import abc
 from typing import Any, Callable, Dict, List, Union
 from itertools import chain
 from dataclasses import dataclass
+from typing import Any
+
 
 import numpy as np
 import pandas as pd
@@ -23,7 +25,7 @@ class DirectionalDerivativeCheckResult:
     """The expected value."""
     success: bool
     """Whether the check passed."""
-    output: Dict[str, Any] = None
+    output: dict[str, Any] = None
     """Miscellaneous output from the method."""
 
 
@@ -31,7 +33,7 @@ class DirectionalDerivativeCheckResult:
 class DerivativeCheckResult:
     method_id: str
     """The method that determined whether the directional derivative is correct."""
-    directional_derivative_check_results: List[
+    directional_derivative_check_results: list[
         DirectionalDerivativeCheckResult
     ]
     """The results from checking individual directions."""
@@ -41,7 +43,7 @@ class DerivativeCheckResult:
     """The expected value."""
     success: bool
     """Whether the check passed."""
-    output: Dict[str, Any] = None
+    output: dict[str, Any] = None
     """Miscellaneous output from the method."""
 
     @property
@@ -49,6 +51,8 @@ class DerivativeCheckResult:
         df = pd.DataFrame(self.directional_derivative_check_results)
         # FIXME string literal
         df.set_index("direction_id", inplace=True)
+        df["abs_diff"] = np.abs(df["expectation"] - df["test"])
+        df["rel_diff"] = df["abs_diff"] / np.abs(df["expectation"])
         return df
 
 
@@ -99,7 +103,14 @@ class NumpyIsCloseDerivativeCheck(DerivativeCheck):
         directional_derivative_check_results = []
         expected_values, test_values = get_expected_and_test_values(
             self.derivative.directional_derivatives
-        )
+        ):
+            test_value = np.asarray(directional_derivative.value)
+
+            expected_value = []
+            for output_index in np.ndindex(self.output_indices):
+                element = self.expectation[output_index][direction_index]
+                expected_value.append(element)
+            expected_value = np.array(expected_value).reshape(test_value.shape)
 
         for (
             direction_index,
@@ -117,7 +128,6 @@ class NumpyIsCloseDerivativeCheck(DerivativeCheck):
                 *args,
                 **kwargs,
             )
-
             directional_derivative_check_result = (
                 DirectionalDerivativeCheckResult(
                     direction_id=directional_derivative.id,

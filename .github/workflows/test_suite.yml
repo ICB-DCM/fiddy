@@ -13,15 +13,15 @@ jobs:
   build:
     name: Test suite
 
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-24.04
     strategy:
       fail-fast: true
       matrix:
-        python-version: ['3.9', '3.11']
+        python-version: ['3.10', '3.12']
 
     steps:
     - name: Set up Python ${{ matrix.python-version }}
-      uses: actions/setup-python@v2
+      uses: actions/setup-python@v5
       with:
         python-version: ${{ matrix.python-version }}
 
@@ -29,7 +29,7 @@ jobs:
       with:
         fetch-depth: 20
 
-    - uses: actions/cache@v2
+    - uses: actions/cache@v4
       with:
         path: ~/.cache/pip
         key: ${{ hashFiles('setup.py') }}-py${{ matrix.python-version }}
@@ -54,19 +54,19 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        python-version: ['3.11']
+        python-version: ['3.12']
 
     steps:
     - name: Check out repository
-      uses: actions/checkout@v3
+      uses: actions/checkout@v4
 
     - name: Prepare python ${{ matrix.python-version }}
-      uses: actions/setup-python@v4
+      uses: actions/setup-python@v5
       with:
         python-version: ${{ matrix.python-version }}
 
     - name: Cache
-      uses: actions/cache@v3
+      uses: actions/cache@v4
       with:
         path: ~/.cache
         key: ${{ runner.os }}-${{ matrix.python-version }}-ci-quality
@@ -74,34 +74,31 @@ jobs:
     - name: Install dependencies
       run: pip install tox pre-commit
 
-    - name: Check repository size
-      run: tox -e size
+# Disables until https://github.com/regebro/pyroma/issues/93 is fixed
+#    - name: Run quality checks
+#      timeout-minutes: 5
+#      run: tox -e pyroma
 
-    - name: Run quality checks
-      timeout-minutes: 5
-      run: tox -e pyroma,flake8
-
-# failing on github
-#    - name: Run pre-commit hooks
-#      run: pre-commit run --all-files
+    - name: Run pre-commit hooks
+      run: pre-commit run --all-files
 
   docs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        python-version: ['3.11']
+        python-version: ['3.12']
 
     steps:
     - name: Check out repository
-      uses: actions/checkout@v3
+      uses: actions/checkout@v4
 
     - name: Prepare python ${{ matrix.python-version }}
-      uses: actions/setup-python@v4
+      uses: actions/setup-python@v5
       with:
         python-version: ${{ matrix.python-version }}
 
     - name: Cache
-      uses: actions/cache@v3
+      uses: actions/cache@v4
       with:
         path: ~/.cache
         key: ${{ runner.os }}-${{ matrix.python-version }}-ci-docs

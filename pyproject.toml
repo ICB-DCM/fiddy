@@ -1,9 +1,67 @@
 [build-system]
-requires = [
-    "setuptools>=42",
-    "wheel"
-]
+requires = ["setuptools>=64", "setuptools-scm>=8"]
 build-backend = "setuptools.build_meta"
 
-[tool.black]
+[project]
+name = "fiddy"
+description = "Finite difference methods"
+readme = "README.md"
+dynamic = ["version", "optional-dependencies"]
+license = "BSD-3-Clause"
+license-files = ["LICENSE"]
+authors = [
+    { name = "The fiddy developers", email = "dilan.pathirana@uni-bonn.de" }
+]
+keywords = ["finite difference", "gradient check", "difference quotient"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.10",
+]
+dependencies = [
+    "joblib",
+    "numpy",
+    "pandas"
+]
+requires-python = ">=3.10"
+
+[project.urls]
+Homepage = "https://github.com/icb-dcm/fiddy"
+Documentation = "https://fiddy.readthedocs.io"
+Repository = "https://github.com/icb-dcm/fiddy"
+"Bug Tracker" = "https://github.com/icb-dcm/fiddy/issues"
+
+[tool.setuptools.packages.find]
+include = ["fiddy*"]
+
+[tool.setuptools_scm]
+
+[tool.ruff]
 line-length = 79
+target-version = "py310"
+lint.select = [
+    "F",  # Pyflakes
+    "I",  # isort
+    # "D",  # pydocstyle (PEP 257)  FIXME enable later
+    "S",  # flake8-bandit
+    "B",  # flake8-bugbear
+    "C4",  # flake8-comprehensions
+    "T20",  # flake8-print
+    "W",  # pycodestyle Warnings
+    "E",  # pycodestyle Errors
+    "UP",  # pyupgrade
+    # "ANN",  # flakes-annotations
+]
+lint.ignore = [
+    "S101", # Use of assert detected
+    # FIXME
+    "E501", # Line too long
+    "T201", # print statement
+    "F403", # star import
+    "F401", # unused import
+]
+[tool.ruff.lint.pydocstyle]
+convention = "pep257"

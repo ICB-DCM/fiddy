@@ -1,7 +1,6 @@
 import os
 import sys
-
-import mock
+from unittest import mock
 
 # Configuration file for the Sphinx documentation builder.
 #
@@ -37,6 +36,10 @@ extensions = [
     "sphinx.ext.napoleon",
     #    "sphinx_autodoc_typehints",  # FIXME fails
     "sphinx.ext.intersphinx",
+    "sphinx.ext.mathjax",
+    "nbsphinx",
+    "IPython.sphinxext.ipython_console_highlighting",
+    "recommonmark",
 ]
 
 intersphinx_mapping = {
@@ -44,6 +47,7 @@ intersphinx_mapping = {
     "pandas": ("https://pandas.pydata.org/docs/", None),
     "numpy": ("https://numpy.org/devdocs/", None),
     "python": ("https://docs.python.org/3", None),
+    "amici": ("https://amici.readthedocs.io/en/latest/", None),
 }
 
 # sphinx-autodoc-typehints
@@ -60,7 +64,14 @@ templates_path = ["_templates"]
 exclude_patterns = ["_build", "Thumbs.db", ".DS_Store"]
 
 
-autodoc_mock_imports = ["amici", "amici.amici", "amici.petab_objective"]
+autodoc_mock_imports = [
+    "amici",
+    "amici.amici",
+    "amici.petab",
+    "amici.petab.simulations",
+    "amici.petab.parameter_mapping",
+    "amici.petab.conditions",
+]
 for mod_name in autodoc_mock_imports:
     sys.modules[mod_name] = mock.MagicMock()
 

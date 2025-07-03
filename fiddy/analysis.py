@@ -1,6 +1,6 @@
 import abc
 from dataclasses import dataclass, field
-from typing import Any, Dict
+from typing import Any
 
 import numpy as np
 
@@ -12,7 +12,7 @@ from .directional_derivative import DirectionalDerivative
 class AnalysisResult:
     method_id: str
     value: Any
-    metadata: Dict[str, Any] = field(default_factory=dict)
+    metadata: dict[str, Any] = field(default_factory=dict)
 
 
 class Analysis:
@@ -93,7 +93,7 @@ class TransformByDirectionScale(Analysis):
     LOG_E_10 = np.log(10)
     only_at_completion: bool = True
 
-    def __init__(self, scales: Dict[str, str]):
+    def __init__(self, scales: dict[str, str]):
         self.scales = scales
         super().__init__()
 

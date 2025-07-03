@@ -1,5 +1,6 @@
 import abc
-from typing import Any, Callable, Union
+from collections.abc import Callable
+from typing import Any
 
 import numpy as np
 
@@ -38,11 +39,9 @@ class Consistency(Success):
     def __init__(
         self,
         computer_parser: Callable[
-            ["directional_derivative.Computer"], Union[float, None]
+            ["directional_derivative.Computer"], float | None
         ] = None,
-        analysis_parser: Callable[
-            ["analysis.Analysis"], Union[float, None]
-        ] = None,
+        analysis_parser: Callable[["analysis.Analysis"], float | None] = None,
         rtol: float = 0.2,
         atol: float = 1e-15,
         equal_nan: bool = True,
@@ -82,8 +81,8 @@ class Consistency(Success):
                 results_by_size[size] = {}
             if result.method_id in results_by_size[size]:
                 raise ValueError(
-                    f'Duplicate, and possibly conflicting, results for method "{result.method_id}" and size "{size}".',
-                    stacklevel=1,
+                    f"Duplicate, and possibly conflicting, results for method "
+                    f'"{result.method_id}" and size "{size}".',
                 )
             results_by_size[size][result.method_id] = result.value
 
@@ -98,25 +97,26 @@ class Consistency(Success):
                 equal_nan=self.equal_nan,
             ).all()
 
-        consistent_results = [
-            np.nanmean(list(results_by_size[size].values()), axis=0)
-            for size, success in success_by_size.items()
-            if success
-        ]
+        consistent_results = np.array(
+            [
+                np.nanmean(list(results_by_size[size].values()), axis=0)
+                for size, success in success_by_size.items()
+                if success
+            ]
+        )
 
-        success = False
-        value = np.nanmean(np.array(consistent_results), axis=0)
-        if consistent_results:
-            success = (
-                np.isclose(
-                    consistent_results,
-                    value,
-                    rtol=self.rtol,
-                    atol=self.atol,
-                    equal_nan=self.equal_nan,
-                ).all()
-                and not np.isnan(consistent_results).all()
-            )
-        value = np.average(np.array(consistent_results), axis=0)
+        if len(consistent_results) == 0:
+            return False, np.nan
 
+        value = np.nanmean(consistent_results, axis=0)
+        success = (
+            np.isclose(
+                consistent_results,
+                value,
+                rtol=self.rtol,
+                atol=self.atol,
+                equal_nan=self.equal_nan,
+            ).all()
+            and not np.isnan(consistent_results).all()
+        )
         return success, value
