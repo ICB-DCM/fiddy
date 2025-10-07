@@ -143,9 +143,9 @@ def run_amici_simulation_to_cached_functions(
             function, derivatives and structure
     """
     if amici_solver is None:
-        amici_solver = amici_model.getSolver()
+        amici_solver = amici_model.create_solver()
     if parameter_ids is None:
-        parameter_ids = amici_model.getParameterIds()
+        parameter_ids = amici_model.get_parameter_ids()
     if amici_edata is not None:
         raise NotImplementedError(
             "Customization of parameter values inside AMICI ExpData."
@@ -158,9 +158,9 @@ def run_amici_simulation_to_cached_functions(
 
     def run_amici_simulation(point: Type.POINT, order: amici.SensitivityOrder):
         problem_parameters = dict(zip(parameter_ids, point, strict=True))
-        amici_model.setParameterById(problem_parameters)
-        amici_solver.setSensitivityOrder(order)
-        rdata = amici.runAmiciSimulation(
+        amici_model.set_parameter_by_id(problem_parameters)
+        amici_solver.set_sensitivity_order(order)
+        rdata = amici.run_simulation(
             model=amici_model, solver=amici_solver, edata=amici_edata
         )
         return rdata
@@ -206,7 +206,7 @@ def run_amici_simulation_to_cached_functions(
 
     # Get structure
     dummy_point = fiddy_array(
-        [amici_model.getParameterById(par_id) for par_id in parameter_ids]
+        [amici_model.get_parameter_by_id(par_id) for par_id in parameter_ids]
     )
     dummy_rdata = run_amici_simulation(
         point=dummy_point, order=amici.SensitivityOrder.first
@@ -366,7 +366,7 @@ def simulate_petab_to_cached_functions(
         k: v for k, v in precreated_kwargs.items() if v is not None
     }
 
-    amici_solver = kwargs.pop("solver", amici_model.getSolver())
+    amici_solver = kwargs.pop("solver", amici_model.create_solver())
 
     simulate_petab_partial = partial(
         simulate_petab,
@@ -377,7 +377,7 @@ def simulate_petab_to_cached_functions(
 
     def simulate_petab_full(point: Type.POINT, order: amici.SensitivityOrder):
         problem_parameters = dict(zip(parameter_ids, point, strict=True))
-        amici_solver.setSensitivityOrder(order)
+        amici_solver.set_sensitivity_order(order)
         result = simulate_petab_partial(
             problem_parameters=problem_parameters,
             solver=amici_solver,
