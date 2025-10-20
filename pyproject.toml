@@ -65,3 +65,12 @@ lint.ignore = [
 ]
 [tool.ruff.lint.pydocstyle]
 convention = "pep257"
+
+[tool.pytest.ini_options]
+filterwarnings = [
+    "error",
+    # https://github.com/sbmlteam/python-libsbml/issues/40
+    "ignore:builtin type .* has no __module__ attribute:DeprecationWarning",
+    # amici
+    "ignore:Conservation laws for non-constant species .*:UserWarning",
+]

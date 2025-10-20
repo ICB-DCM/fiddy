@@ -143,7 +143,7 @@ class DirectionalDerivative:
     expected_result: ExpectedDirectionalDerivative = None
     # If True, no further computations will occur in this class.
     success: bool = False
-    value: Type.SCALAR = None
+    value: Type.SCALAR = np.nan
     completed: bool = False
     # Whether to complete as soon as the success method returns `True`.
     fast: bool = False
