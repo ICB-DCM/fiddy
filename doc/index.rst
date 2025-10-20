@@ -8,6 +8,7 @@ Welcome to fiddy's documentation!
    about
    examples/derivative
    modules
+   development
 
 Indices and tables
 ==================
