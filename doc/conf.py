@@ -43,11 +43,9 @@ extensions = [
 ]
 
 intersphinx_mapping = {
-    "petab": ("https://petab.readthedocs.io/en/stable/", None),
     "pandas": ("https://pandas.pydata.org/docs/", None),
     "numpy": ("https://numpy.org/devdocs/", None),
     "python": ("https://docs.python.org/3", None),
-    "amici": ("https://amici.readthedocs.io/en/latest/", None),
 }
 
 # sphinx-autodoc-typehints
@@ -63,17 +61,6 @@ templates_path = ["_templates"]
 # This pattern also affects html_static_path and html_extra_path.
 exclude_patterns = ["_build", "Thumbs.db", ".DS_Store"]
 
-
-autodoc_mock_imports = [
-    "amici",
-    "amici.amici",
-    "amici.petab",
-    "amici.petab.simulations",
-    "amici.petab.parameter_mapping",
-    "amici.petab.conditions",
-]
-for mod_name in autodoc_mock_imports:
-    sys.modules[mod_name] = mock.MagicMock()
 
 # -- Options for HTML output -------------------------------------------------
 
