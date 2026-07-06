@@ -1,14 +1,6 @@
 fiddy package
 =============
 
-Subpackages
------------
-
-.. toctree::
-   :maxdepth: 4
-
-   fiddy.extensions
-
 Submodules
 ----------
 
