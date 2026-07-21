@@ -1,9 +1,13 @@
 import abc
+from typing import Any, Callable, Dict, List, Union
+from itertools import chain
 from dataclasses import dataclass
 from typing import Any
 
+
 import numpy as np
 import pandas as pd
+import math
 
 from .constants import Type
 from .derivative import Derivative
@@ -97,7 +101,7 @@ class NumpyIsCloseDerivativeCheck(DerivativeCheck):
 
     def method(self, *args, **kwargs):
         directional_derivative_check_results = []
-        for direction_index, directional_derivative in enumerate(
+        expected_values, test_values = get_expected_and_test_values(
             self.derivative.directional_derivatives
         ):
             test_value = np.asarray(directional_derivative.value)
@@ -108,6 +112,16 @@ class NumpyIsCloseDerivativeCheck(DerivativeCheck):
                 expected_value.append(element)
             expected_value = np.array(expected_value).reshape(test_value.shape)
 
+        for (
+            direction_index,
+            directional_derivative,
+            expected_value,
+            test_value,
+        ) in enumerate(zip(
+            self.derivative.directional_derivatives,
+            expected_values,
+            test_values,
+        )):
             test_result = np.isclose(
                 test_value,
                 expected_value,
@@ -130,6 +144,123 @@ class NumpyIsCloseDerivativeCheck(DerivativeCheck):
             )
 
         success = all(r.success for r in directional_derivative_check_results)
+        derivative_check_result = DerivativeCheckResult(
+            method_id=self.method_id,
+            directional_derivative_check_results=directional_derivative_check_results,
+            test=self.derivative.value,
+            expectation=self.expectation,
+            success=success,
+        )
+        return derivative_check_result
+
+
+def get_expected_and_test_values(directional_derivatives):
+    expected_values = []
+    test_values = []
+    for direction_index, directional_derivative in enumerate(
+        directional_derivatives
+    ):
+        test_value = directional_derivative.value
+        test_values.append(test_value)
+
+        expected_value = []
+        for output_index in np.ndindex(self.output_indices):
+            element = self.expectation[output_index][direction_index]
+            expected_value.append(element)
+        expected_value = np.array(expected_value).reshape(test_value.shape)
+        expected_values.append(expected_value)
+
+    return expected_values, test_values
+
+
+class HybridDerivativeCheck(DerivativeCheck):
+    """HybridDerivativeCheck.
+
+    The method checks, if gradients are in finite differences range [min, max],
+    using forward, backward and central finite differences for potential
+    multiple stepsizes eps. If true, gradients will be checked for each
+    parameter and assessed whether or not gradients are within acceptable
+    absolute tolerances.
+    .. math::
+        \\frac{|\\mu - \\kappa|}{\\lambda} < \\epsilon
+    """
+
+    method_id = "hybrid"
+
+    def method(self, *args, **kwargs):
+        success = True
+        expected_values, test_values = get_expected_and_test_values(
+            self.derivative.directional_derivatives
+        )
+
+        results_all = []
+        directional_derivative_check_results = []
+        for step_size in range(0, len(expected_values)):
+            approxs_for_param = []
+            grads_for_param = []
+            results = []
+            for diff_index, directional_derivative in enumerate(
+                self.derivative.directional_derivatives
+            ):
+                try:
+                    for grad, approx in zip(
+                        expected_values[diff_index - 1][step_size - 1],
+                        test_values[diff_index - 1][step_size - 1],
+                    ):
+                        approxs_for_param.append(approx)
+                        grads_for_param.append(grad)
+                    fd_range = np.percentile(approxs_for_param, [0, 100])
+                    fd_mean = np.mean(approxs_for_param)
+                    grad_mean = np.mean(grads_for_param)
+                    if not (fd_range[0] <= grad_mean <= fd_range[1]):
+                        if np.any(
+                            [
+                                abs(x - y) > kwargs["atol"]
+                                for i, x in enumerate(approxs_for_param)
+                                for j, y in enumerate(approxs_for_param)
+                                if i != j
+                            ]
+                        ):
+                            fd_range = abs(fd_range[1] - fd_range[0])
+                            if (
+                                abs(grad_mean - fd_mean)
+                                / abs(fd_range + np.finfo(float).eps)
+                            ) > kwargs["rtol"]:
+                                results.append(False)
+                            else:
+                                results.append(True)
+                        else:
+                            results.append(
+                                None
+                            )  # can't judge consistency / questionable grad approxs
+                    else:
+                        fd_range = abs(fd_range[1] - fd_range[0])
+                        if not np.isfinite([fd_range, fd_mean]).all():
+                            results.append(None)
+                        else:
+                            result = True
+                        results.append(result)
+                except (IndexError, TypeError) as err:
+                    raise ValueError(
+                        f"Unexpected error encountered (This should never happen!)"
+                    ) from err
+
+                directional_derivative_check_result = (
+                    DirectionalDerivativeCheckResult(
+                        direction_id=directional_derivative.id,
+                        method_id=self.method_id,
+                        test=test_value,
+                        expectation=expected_value,
+                        output={"return": results},
+                        success=all(results),
+                    )
+                )
+                directional_derivative_check_results.append(
+                    directional_derivative_check_result
+                )
+                results_all.append(results)
+
+        success = all(chain(*results_all))
         derivative_check_result = DerivativeCheckResult(
             method_id=self.method_id,
             directional_derivative_check_results=directional_derivative_check_results,
