@@ -33,6 +33,39 @@ class Success:
 
 
 class Consistency(Success):
+    """Consistency-based success checker.
+
+    For each step size, checks whether the requested methods
+    (e.g. forward/backward/central) agree with each other ("self-consistent").
+    Self-consistency alone is not sufficient though: a step size can be small
+    enough that all methods sample points within the target function's
+    floating-point noise floor, and become correlated (affected by the same
+    rounding/cancellation error) -- self-consistent, yet biased away from the
+    truth. Symmetrically, a step size can also be large enough that all
+    methods are biased the same way by higher-order/truncation effects.
+
+    To guard against this, self-consistent step sizes are additionally
+    required to agree with the majority of other self-consistent step sizes,
+    via iterative outlier rejection (order-independent; step size magnitude
+    is not used as a proxy for trustworthiness): repeatedly compute the
+    median and a robust (MAD-based) spread of the current candidates, and
+    drop the single worst-deviating one if it exceeds ``trend_n_sigma``
+    scaled MADs from the median, until nothing looks anomalous. This only
+    activates once there are at least ``min_trend_samples`` self-consistent
+    step sizes; below that, there isn't enough data to estimate a spread, and
+    all self-consistent step sizes are used, as before.
+
+    Note that this is a majority-vote style method: like any check based
+    purely on the agreement of the values themselves (no independent ground
+    truth), it has a breakdown point of roughly 50% (a property of the
+    underlying median/MAD statistics) -- if close to half (or more) of the
+    self-consistent step sizes are corrupted, this check cannot reliably
+    tell which subset is trustworthy. This is a fundamental limitation of
+    any purely data-driven consistency check, not something this
+    implementation can detect or work around; sufficient step sizes with a
+    real chance of being individually trustworthy should be provided.
+    """
+
     # FIXME string literal
     id = "consistency"
     only_at_completion: bool = True
@@ -46,7 +79,33 @@ class Consistency(Success):
         rtol: float = 0.2,
         atol: float = 1e-15,
         equal_nan: bool = True,
+        trend_n_sigma: float = 5.0,
+        min_trend_samples: int = 3,
     ):
+        """Construct.
+
+        Args:
+            rtol:
+                Relative tolerance for the self-consistency check of methods
+                at the same step size, and for the final check of the
+                blended value against the trusted per-size means.
+            atol:
+                Absolute tolerance, analogous to `rtol`. Also used as a
+                floor for the robust spread estimate in the cross-step-size
+                outlier rejection (see class docstring).
+            equal_nan:
+                Whether `NaN`s are considered equal in tolerance checks.
+            trend_n_sigma:
+                The number of scaled median-absolute-deviations a
+                self-consistent step size's estimate may deviate from the
+                median of the other trusted step sizes' estimates, before it
+                is rejected as an outlier.
+            min_trend_samples:
+                The minimum number of self-consistent step sizes required
+                before the cross-step-size outlier rejection is attempted.
+                Below this, all self-consistent step sizes are trusted, same
+                as if `trend_n_sigma`/outlier rejection did not exist.
+        """
         super().__init__()
         # if computer_parser is None:
         #     computer_parser = (
@@ -66,6 +125,8 @@ class Consistency(Success):
         self.rtol = rtol
         self.atol = atol
         self.equal_nan = equal_nan
+        self.trend_n_sigma = trend_n_sigma
+        self.min_trend_samples = min_trend_samples
 
     def method(
         self, directional_derivative: DirectionalDerivative
@@ -87,47 +148,88 @@ class Consistency(Success):
                 )
             results_by_size[size][result.method_id] = result.value
 
-        success_by_size = {}
-        for size, results in results_by_size.items():
-            values = list(results.values())
-            with warnings.catch_warnings():
-                warnings.filterwarnings(
-                    "ignore", "Mean of empty slice", RuntimeWarning
-                )
-                mean = np.nanmean(values, axis=0)
-            success_by_size[size] = np.isclose(
-                values,
-                mean,
-                rtol=self.rtol / 2,
-                atol=self.atol / 2,
-                equal_nan=self.equal_nan,
-            ).all()
-
+        self_consistent_means = []
         with warnings.catch_warnings():
             warnings.filterwarnings(
                 "ignore", "Mean of empty slice", RuntimeWarning
             )
+            for results in results_by_size.values():
+                values = list(results.values())
+                mean = np.nanmean(values, axis=0)
+                is_self_consistent = np.isclose(
+                    values,
+                    mean,
+                    rtol=self.rtol / 2,
+                    atol=self.atol / 2,
+                    equal_nan=self.equal_nan,
+                ).all()
+                if is_self_consistent:
+                    self_consistent_means.append(mean)
 
-            consistent_results = np.array(
-                [
-                    np.nanmean(list(results_by_size[size].values()), axis=0)
-                    for size, success in success_by_size.items()
-                    if success
-                ]
-            )
-
-            if len(consistent_results) == 0:
+            if not self_consistent_means:
                 return False, np.nan
 
-            value = np.nanmean(consistent_results, axis=0)
+            trusted_means = self._reject_outliers(self_consistent_means)
+
+            if not trusted_means:
+                return False, np.nan
+
+            value = np.nanmean(trusted_means, axis=0)
+
         success = (
             np.isclose(
-                consistent_results,
+                trusted_means,
                 value,
                 rtol=self.rtol,
                 atol=self.atol,
                 equal_nan=self.equal_nan,
             ).all()
-            and not np.isnan(consistent_results).all()
+            and not np.isnan(trusted_means).all()
         )
         return success, value
+
+    def _reject_outliers(
+        self, means: list[Type.DIRECTIONAL_DERIVATIVE]
+    ) -> list[Type.DIRECTIONAL_DERIVATIVE]:
+        """Iteratively reject step sizes whose estimate is an outlier.
+
+        See the class docstring for the rationale. Order-independent: does
+        not assume larger (or smaller) step sizes are inherently more
+        trustworthy.
+
+        Args:
+            means:
+                The per-step-size mean estimates that passed the
+                within-step-size self-consistency check.
+
+        Returns:
+            The subset of `means` that are also mutually consistent with
+            each other.
+        """
+        trusted = list(means)
+        if len(trusted) < self.min_trend_samples:
+            return trusted
+
+        floor = max(self.atol / 2, np.finfo(float).tiny)
+        while len(trusted) >= self.min_trend_samples:
+            stacked = np.asarray(trusted, dtype=float)
+            with warnings.catch_warnings():
+                warnings.filterwarnings("ignore", "All-NaN", RuntimeWarning)
+                center = np.nanmedian(stacked, axis=0)
+                mad = np.nanmedian(np.abs(stacked - center), axis=0)
+                scale = np.maximum(mad * 1.4826, floor)
+                # One badness score per candidate, reduced across all
+                # output dimensions (a candidate is an outlier if it
+                # deviates too much in *any* output element).
+                badness = np.nanmax(
+                    (np.abs(stacked - center) / scale).reshape(
+                        len(trusted), -1
+                    ),
+                    axis=1,
+                )
+                worst = int(np.nanargmax(badness))
+            if badness[worst] > self.trend_n_sigma:
+                trusted.pop(worst)
+            else:
+                break
+        return trusted
