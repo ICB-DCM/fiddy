@@ -9,7 +9,7 @@ from fiddy import MethodId, get_derivative, methods
 from fiddy.analysis import ApproximateCentral
 from fiddy.derivative import Computer
 from fiddy.derivative_check import NumpyIsCloseDerivativeCheck
-from fiddy.success import Consistency
+from fiddy.success import Consistency, Success
 
 RTOL = 1e-2
 ATOL = 1e-15
@@ -121,6 +121,111 @@ def test_get_derivative(point, sizes, output_shape):
     )
     result = check(rtol=1e-2)
     assert result.success
+
+
+def _get_rosenbrock_check_result(
+    point, output_shape=(1,), success_checker=None, **isclose_kwargs
+):
+    function = partial(rosenbrock, output_shape=output_shape)
+    expected_derivative_function = partial(
+        rosenbrock_der, output_shape=output_shape
+    )
+    derivative = get_derivative(
+        function=function,
+        point=point,
+        sizes=[1e-10, 1e-5],
+        method_ids=[MethodId.FORWARD, MethodId.BACKWARD],
+        analysis_classes=[ApproximateCentral],
+        success_checker=success_checker or Consistency(),
+    )
+    expected_value = expected_derivative_function(point)
+    check = NumpyIsCloseDerivativeCheck(
+        derivative=derivative,
+        expectation=expected_value,
+        point=point,
+    )
+    return check(**isclose_kwargs)
+
+
+def test_assert_success_passes_silently():
+    point = np.array((1, 0, 0))
+    result = _get_rosenbrock_check_result(point, rtol=1e-2)
+    assert result.success
+
+    result.assert_success()
+
+
+def test_assert_success_prints_on_success(capsys):
+    point = np.array((1, 0, 0))
+    result = _get_rosenbrock_check_result(point, rtol=1e-2)
+    assert result.success
+
+    result.assert_success(always_print=True)
+
+    captured = capsys.readouterr()
+    assert "PASSED" in captured.out
+    assert "Maximum absolute difference" in captured.out
+
+
+def test_assert_success_raises_on_failure():
+    point = np.array((1, 0, 0))
+    # `rtol=0, atol=0` guarantees the comparison fails.
+    result = _get_rosenbrock_check_result(point, rtol=0, atol=0)
+    assert not result.success
+
+    with pytest.raises(AssertionError) as error:
+        result.assert_success()
+
+    message = str(error.value)
+    assert "FAILED" in message
+    assert "Maximum absolute difference" in message
+    assert "Maximum relative difference" in message
+    failed_ids = result.df.index[~result.df["success"]]
+    assert len(failed_ids) > 0
+    for direction_id in failed_ids:
+        assert direction_id in message
+
+
+def test_df_includes_original_index():
+    point = np.full(6, 0.5)
+    result = _get_rosenbrock_check_result(point, rtol=1e-2)
+
+    # The original (pre-sort) position of each direction, so patterns can
+    # still be spotted once a report re-sorts by failure magnitude.
+    assert list(result.df["index"]) == list(range(6))
+
+
+def test_assert_success_shows_all_failed_directions():
+    point = np.full(40, 0.5)
+    result = _get_rosenbrock_check_result(point, rtol=0, atol=0)
+    assert not result.success
+
+    with pytest.raises(AssertionError) as error:
+        result.assert_success()
+
+    message = str(error.value)
+    failed_ids = result.df.index[~result.df["success"]]
+    assert len(failed_ids) == 40
+    for direction_id in failed_ids:
+        assert direction_id in message
+
+
+class _AlwaysFail(Success):
+    id = "always-fail"
+    only_at_completion = True
+
+    def method(self, directional_derivative):
+        return False, np.nan
+
+
+def test_assert_success_raises_when_derivative_computation_failed():
+    point = np.array((1, 0, 0))
+    result = _get_rosenbrock_check_result(
+        point, success_checker=_AlwaysFail(), rtol=1e-2
+    )
+
+    with pytest.raises(AssertionError, match="aborted"):
+        result.assert_success()
 
 
 def test_get_derivative_relative():
