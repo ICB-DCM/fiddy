@@ -37,33 +37,17 @@ class Consistency(Success):
 
     For each step size, checks whether the requested methods
     (e.g. forward/backward/central) agree with each other ("self-consistent").
-    Self-consistency alone is not sufficient though: a step size can be small
-    enough that all methods sample points within the target function's
+    A step size is trusted if it is self-consistent; the final value is the
+    average of all trusted step sizes' means, and `success` additionally
+    requires those means to be mutually close to that average.
+
+    Self-consistency alone is not a very strong guarantee: a step size can be
+    small enough that all methods sample points within the target function's
     floating-point noise floor, and become correlated (affected by the same
     rounding/cancellation error) -- self-consistent, yet biased away from the
     truth. Symmetrically, a step size can also be large enough that all
-    methods are biased the same way by higher-order/truncation effects.
-
-    To guard against this, self-consistent step sizes are additionally
-    required to agree with the majority of other self-consistent step sizes,
-    via iterative outlier rejection (order-independent; step size magnitude
-    is not used as a proxy for trustworthiness): repeatedly compute the
-    median and a robust (MAD-based) spread of the current candidates, and
-    drop the single worst-deviating one if it exceeds ``trend_n_sigma``
-    scaled MADs from the median, until nothing looks anomalous. This only
-    activates once there are at least ``min_trend_samples`` self-consistent
-    step sizes; below that, there isn't enough data to estimate a spread, and
-    all self-consistent step sizes are used, as before.
-
-    Note that this is a majority-vote style method: like any check based
-    purely on the agreement of the values themselves (no independent ground
-    truth), it has a breakdown point of roughly 50% (a property of the
-    underlying median/MAD statistics) -- if close to half (or more) of the
-    self-consistent step sizes are corrupted, this check cannot reliably
-    tell which subset is trustworthy. This is a fundamental limitation of
-    any purely data-driven consistency check, not something this
-    implementation can detect or work around; sufficient step sizes with a
-    real chance of being individually trustworthy should be provided.
+    methods are biased the same way by higher-order/truncation effects. See
+    `RobustConsistency` for a variant that additionally guards against this.
     """
 
     # FIXME string literal
@@ -79,8 +63,6 @@ class Consistency(Success):
         rtol: float = 0.2,
         atol: float = 1e-15,
         equal_nan: bool = True,
-        trend_n_sigma: float = 5.0,
-        min_trend_samples: int = 3,
     ):
         """Construct.
 
@@ -90,21 +72,9 @@ class Consistency(Success):
                 at the same step size, and for the final check of the
                 blended value against the trusted per-size means.
             atol:
-                Absolute tolerance, analogous to `rtol`. Also used as a
-                floor for the robust spread estimate in the cross-step-size
-                outlier rejection (see class docstring).
+                Absolute tolerance, analogous to `rtol`.
             equal_nan:
                 Whether `NaN`s are considered equal in tolerance checks.
-            trend_n_sigma:
-                The number of scaled median-absolute-deviations a
-                self-consistent step size's estimate may deviate from the
-                median of the other trusted step sizes' estimates, before it
-                is rejected as an outlier.
-            min_trend_samples:
-                The minimum number of self-consistent step sizes required
-                before the cross-step-size outlier rejection is attempted.
-                Below this, all self-consistent step sizes are trusted, same
-                as if `trend_n_sigma`/outlier rejection did not exist.
         """
         super().__init__()
         # if computer_parser is None:
@@ -125,12 +95,13 @@ class Consistency(Success):
         self.rtol = rtol
         self.atol = atol
         self.equal_nan = equal_nan
-        self.trend_n_sigma = trend_n_sigma
-        self.min_trend_samples = min_trend_samples
 
-    def method(
+    def _self_consistent_means(
         self, directional_derivative: DirectionalDerivative
-    ) -> tuple[bool, float]:
+    ) -> list[Type.DIRECTIONAL_DERIVATIVE]:
+        """Group results by step size, and return the per-size mean for
+        every step size whose requested methods agree with each other
+        ("self-consistent") within `rtol/2`, `atol/2`."""
         # FIXME string literals
         computer_results = directional_derivative.get_computer_results()
         analysis_results = directional_derivative.get_analysis_results()
@@ -165,15 +136,128 @@ class Consistency(Success):
                 ).all()
                 if is_self_consistent:
                     self_consistent_means.append(mean)
+        return self_consistent_means
 
-            if not self_consistent_means:
-                return False, np.nan
+    def method(
+        self, directional_derivative: DirectionalDerivative
+    ) -> tuple[bool, float]:
+        self_consistent_means = self._self_consistent_means(
+            directional_derivative
+        )
 
-            trusted_means = self._reject_outliers(self_consistent_means)
+        if not self_consistent_means:
+            return False, np.nan
 
-            if not trusted_means:
-                return False, np.nan
+        with warnings.catch_warnings():
+            warnings.filterwarnings(
+                "ignore", "Mean of empty slice", RuntimeWarning
+            )
+            value = np.nanmean(self_consistent_means, axis=0)
 
+        success = (
+            np.isclose(
+                self_consistent_means,
+                value,
+                rtol=self.rtol,
+                atol=self.atol,
+                equal_nan=self.equal_nan,
+            ).all()
+            and not np.isnan(self_consistent_means).all()
+        )
+        return success, value
+
+
+class RobustConsistency(Consistency):
+    """`Consistency`, plus rejection of step sizes that are self-consistent
+    but inconsistent with the majority of other step sizes.
+
+    As explained in `Consistency`'s docstring, self-consistency of a step
+    size (its methods agreeing with each other) is not a strong guarantee on
+    its own -- a step size can be spuriously self-consistent while biased
+    away from the truth (e.g. correlated rounding/cancellation error at very
+    small steps, or correlated higher-order/truncation effects at very large
+    steps).
+
+    To guard against this, self-consistent step sizes are additionally
+    required to agree with the majority of other self-consistent step sizes,
+    via iterative outlier rejection (order-independent; step size magnitude
+    is not used as a proxy for trustworthiness): repeatedly compute the
+    median and a robust (MAD-based) spread of the current candidates, and
+    drop the single worst-deviating one if it exceeds ``trend_n_sigma``
+    scaled MADs from the median, until nothing looks anomalous. This only
+    activates once there are at least ``min_trend_samples`` self-consistent
+    step sizes; below that, there isn't enough data to estimate a spread, and
+    all self-consistent step sizes are used, as in `Consistency`. A
+    `UserWarning` is emitted whenever one or more step sizes are rejected
+    this way.
+
+    Note that this is a majority-vote style method: like any check based
+    purely on the agreement of the values themselves (no independent ground
+    truth), it has a breakdown point of roughly 50% (a property of the
+    underlying median/MAD statistics) -- if close to half (or more) of the
+    self-consistent step sizes are corrupted, this check cannot reliably
+    tell which subset is trustworthy. This is a fundamental limitation of
+    any purely data-driven consistency check, not something this
+    implementation can detect or work around; sufficient step sizes with a
+    real chance of being individually trustworthy should be provided.
+    """
+
+    id = "robust_consistency"
+
+    def __init__(
+        self,
+        *args,
+        trend_n_sigma: float = 5.0,
+        min_trend_samples: int = 3,
+        **kwargs,
+    ):
+        """Construct.
+
+        Args:
+            trend_n_sigma:
+                The number of scaled median-absolute-deviations a
+                self-consistent step size's estimate may deviate from the
+                median of the other trusted step sizes' estimates, before it
+                is rejected as an outlier.
+            min_trend_samples:
+                The minimum number of self-consistent step sizes required
+                before the cross-step-size outlier rejection is attempted.
+                Below this, all self-consistent step sizes are trusted, same
+                as in `Consistency`.
+        """
+        super().__init__(*args, **kwargs)
+        self.trend_n_sigma = trend_n_sigma
+        self.min_trend_samples = min_trend_samples
+
+    def method(
+        self, directional_derivative: DirectionalDerivative
+    ) -> tuple[bool, float]:
+        self_consistent_means = self._self_consistent_means(
+            directional_derivative
+        )
+
+        if not self_consistent_means:
+            return False, np.nan
+
+        trusted_means = self._reject_outliers(self_consistent_means)
+
+        if not trusted_means:
+            return False, np.nan
+
+        n_rejected = len(self_consistent_means) - len(trusted_means)
+        if n_rejected:
+            warnings.warn(
+                f"{n_rejected} step size(s) were self-consistent (the "
+                "requested methods agreed with each other) but were "
+                "rejected as inconsistent with the majority of other step "
+                "sizes; see `RobustConsistency`'s docstring.",
+                stacklevel=2,
+            )
+
+        with warnings.catch_warnings():
+            warnings.filterwarnings(
+                "ignore", "Mean of empty slice", RuntimeWarning
+            )
             value = np.nanmean(trusted_means, axis=0)
 
         success = (
