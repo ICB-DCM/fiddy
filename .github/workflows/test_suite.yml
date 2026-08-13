@@ -32,19 +32,11 @@ jobs:
     - uses: actions/cache@v6
       with:
         path: ~/.cache/pip
-        key: ${{ hashFiles('setup.py') }}-py${{ matrix.python-version }}
-
-    # install dependencies
-    - name: apt
-      run: |
-        sudo apt-get update \
-          && sudo apt-get install -y \
-          swig \
-          libatlas-base-dev
+        key: ${{ hashFiles('pyproject.toml') }}-py${{ matrix.python-version }}
 
     - name: Install package
       run: |
-        pip install --upgrade --upgrade-strategy eager -e .[tests,amici]
+        pip install --upgrade --upgrade-strategy eager -e .[tests]
 
     - name: Run tests
       run: |
