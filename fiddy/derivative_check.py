@@ -27,7 +27,6 @@ class DirectionalDerivativeCheckResult:
 
 def _worst_element(value) -> float:
     """The largest error across all outputs for a single directional derivative."""
-    """
     return float(np.max(np.atleast_1d(value)))
 
 
@@ -121,7 +120,7 @@ class DerivativeCheckResult:
                 summary_df = derivative_df[summary_columns].copy()
                 if "value" in summary_df.columns:
                     summary_df["value"] = summary_df["value"].map(
-                        _format_value
+                        _get_printable_value
                     )
                 with _wide_display():
                     details = str(summary_df)
@@ -176,7 +175,7 @@ class DerivativeCheckResult:
             ]
             failed_df = df.loc[failed_ids, display_columns].copy()
             for column in ("test", "expectation", "abs_diff", "rel_diff"):
-                failed_df[column] = failed_df[column].map(_format_value)
+                failed_df[column] = failed_df[column].map(_get_printable_value)
             with _wide_display():
                 lines.append(str(failed_df))
             lines.append("")
