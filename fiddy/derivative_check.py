@@ -5,7 +5,11 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
-from .constants import Type
+from .constants import (
+    NUMPY_ISCLOSE_DEFAULT_ATOL,
+    NUMPY_ISCLOSE_DEFAULT_RTOL,
+    Type,
+)
 from .derivative import Derivative
 
 
@@ -25,6 +29,40 @@ class DirectionalDerivativeCheckResult:
     """Miscellaneous output from the method."""
 
 
+def _worst_element(value) -> float:
+    """The largest error across all outputs for a single directional derivative."""
+    return float(np.max(np.atleast_1d(value)))
+
+
+def _get_printable_value(value) -> str:
+    """Round scalar(s) for printing."""
+    array = np.atleast_1d(value)
+    if array.size == 1:
+        return f"{float(array.reshape(-1)[0]):.6g}"
+    return np.array2string(
+        array, precision=6, suppress_small=True, threshold=6
+    )
+
+
+def _wide_display():
+    """A ``pd.option_context`` for rendering full, readably-formatted tables.
+
+    Intended for reports that may only be seen as plain-text CI log output,
+    where a truncated/wrapped table or a mix of full-precision and
+    scientific-notation floats is hard to read.
+    """
+    return pd.option_context(
+        "display.max_columns",
+        None,
+        "display.width",
+        None,
+        "display.max_rows",
+        None,
+        "display.float_format",
+        "{:.6g}".format,
+    )
+
+
 @dataclass
 class DerivativeCheckResult:
     method_id: str
@@ -39,6 +77,12 @@ class DerivativeCheckResult:
     """The expected value."""
     success: bool
     """Whether the check passed."""
+    atol: float = None
+    """The absolute tolerance used by the check, if any."""
+    rtol: float = None
+    """The relative tolerance used by the check, if any."""
+    derivative: Derivative = None
+    """The test derivative, including whether it was computed successfully."""
     output: dict[str, Any] = None
     """Miscellaneous output from the method."""
 
@@ -47,9 +91,120 @@ class DerivativeCheckResult:
         df = pd.DataFrame(self.directional_derivative_check_results)
         # FIXME string literal
         df.set_index("direction_id", inplace=True)
+        # The direction's position in the original (unsorted) direction
+        # order, so patterns (e.g. "the first direction is always off") can
+        # still be spotted after reports re-sort by failure magnitude.
+        df.insert(0, "direction_index", range(len(df)))
         df["abs_diff"] = np.abs(df["expectation"] - df["test"])
         df["rel_diff"] = df["abs_diff"] / np.abs(df["expectation"])
+        if self.atol is not None:
+            df["atol_success"] = df["abs_diff"] <= self.atol
+        if self.rtol is not None:
+            df["rtol_success"] = df["rel_diff"] <= self.rtol
         return df
+
+    def assert_success(self, always_print: bool = False) -> None:
+        """Assert that this derivative check succeeded.
+
+        Args:
+            always_print:
+                Print the summary even if the check succeeded.
+        """
+        if self.derivative is not None:
+            derivative_df = self.derivative.df
+            if not derivative_df["success"].all():
+                failed_ids = list(
+                    derivative_df.index[~derivative_df["success"]]
+                )
+                summary_columns = [
+                    column
+                    for column in ("value", "success", "completed")
+                    if column in derivative_df.columns
+                ]
+                summary_df = derivative_df[summary_columns].copy()
+                if "value" in summary_df.columns:
+                    summary_df["value"] = summary_df["value"].map(
+                        _get_printable_value
+                    )
+                with _wide_display():
+                    details = str(summary_df)
+                raise AssertionError(
+                    "Derivative check aborted: failed to compute the test "
+                    "derivative via finite differences for "
+                    f"{len(failed_ids)}/{len(derivative_df)} direction(s): "
+                    f"{failed_ids}\n\n"
+                    f"{details}\n\n"
+                    "(inspect `derivative.df` for full per-direction "
+                    "computer/analysis details)"
+                )
+
+        if self.success and not always_print:
+            return
+
+        message = self._build_report()
+
+        if not self.success:
+            raise AssertionError(message)
+
+        print(message)
+
+    def _build_report(self) -> str:
+        """Build the per-direction report used by :meth:`assert_success`."""
+        df = self.df
+        severity = df["rel_diff"].map(_worst_element)
+        df = df.loc[severity.sort_values(ascending=False).index]
+        n_total = len(df)
+        n_failed = int((~df["success"]).sum())
+        status = "PASSED" if self.success else "FAILED"
+
+        header = (
+            f"Derivative check {status} "
+            f"({n_total - n_failed}/{n_total} direction(s) passed)"
+        )
+        rule = "=" * len(header)
+        lines = [rule, header, rule]
+
+        if n_failed:
+            failed_ids = list(df.index[~df["success"]])
+            lines.append(f"Failed direction(s): {failed_ids}")
+            lines.append("")
+            lines.append(
+                "Details (failed directions, sorted by relative "
+                "difference, worst first):"
+            )
+            display_columns = [
+                column
+                for column in (
+                    "direction_index",
+                    "test",
+                    "expectation",
+                    "abs_diff",
+                    "rel_diff",
+                    "atol_success",
+                    "rtol_success",
+                    "success",
+                )
+                if column in df.columns
+            ]
+            failed_df = df.loc[failed_ids, display_columns].copy()
+            for column in ("test", "expectation", "abs_diff", "rel_diff"):
+                failed_df[column] = failed_df[column].map(_get_printable_value)
+            with _wide_display():
+                lines.append(str(failed_df))
+            lines.append("")
+
+        abs_tol = (
+            f" (tolerance: {self.atol:.6g})" if self.atol is not None else ""
+        )
+        rel_tol = (
+            f" (tolerance: {self.rtol:.6g})" if self.rtol is not None else ""
+        )
+        max_adiff = max(df["abs_diff"].map(_worst_element))
+        max_rdiff = max(df["rel_diff"].map(_worst_element))
+        lines.append(f"Maximum absolute difference: {max_adiff:.6g}{abs_tol}")
+        lines.append(f"Maximum relative difference: {max_rdiff:.6g}{rel_tol}")
+        lines.append(rule)
+        return "\n".join(lines)
 
 
 class DerivativeCheck(abc.ABC):
@@ -95,7 +250,13 @@ class DerivativeCheck(abc.ABC):
 class NumpyIsCloseDerivativeCheck(DerivativeCheck):
     method_id = "np.isclose"
 
-    def method(self, *args, **kwargs):
+    def method(
+        self,
+        *args,
+        atol=NUMPY_ISCLOSE_DEFAULT_ATOL,
+        rtol=NUMPY_ISCLOSE_DEFAULT_RTOL,
+        **kwargs,
+    ):
         directional_derivative_check_results = []
         for direction_index, directional_derivative in enumerate(
             self.derivative.directional_derivatives
@@ -112,6 +273,8 @@ class NumpyIsCloseDerivativeCheck(DerivativeCheck):
                 test_value,
                 expected_value,
                 *args,
+                atol=atol,
+                rtol=rtol,
                 **kwargs,
             )
             directional_derivative_check_result = (
@@ -136,5 +299,9 @@ class NumpyIsCloseDerivativeCheck(DerivativeCheck):
             test=self.derivative.value,
             expectation=self.expectation,
             success=success,
+            # `np.isclose` defaults, in case the caller didn't override them.
+            atol=atol,
+            rtol=rtol,
+            derivative=self.derivative,
         )
         return derivative_check_result

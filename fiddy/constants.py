@@ -1,3 +1,4 @@
+import inspect
 from collections.abc import Callable
 from enum import Enum
 from typing import Any, Union
@@ -8,6 +9,8 @@ from numpy.typing import NDArray
 __all__ = [
     "Type",
     "MethodId",
+    "NUMPY_ISCLOSE_DEFAULT_RTOL",
+    "NUMPY_ISCLOSE_DEFAULT_ATOL",
 ]
 
 
@@ -50,3 +53,7 @@ class MethodId(str, Enum):
 
 
 EPSILON = 1e-5
+
+# Fiddy's default tolerances for numpy.isclose
+NUMPY_ISCLOSE_DEFAULT_RTOL = 1e-5
+NUMPY_ISCLOSE_DEFAULT_ATOL = 1e-8
