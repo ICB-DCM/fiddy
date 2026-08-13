@@ -137,6 +137,15 @@ class DerivativeCheckResult:
         if self.success and not always_print:
             return
 
+        message = self._build_report()
+
+        if not self.success:
+            raise AssertionError(message)
+
+        print(message)
+
+    def _build_report(self) -> str:
+        """Build the per-direction report used by :meth:`assert_success`."""
         df = self.df
         severity = df["rel_diff"].map(_worst_element)
         df = df.loc[severity.sort_values(ascending=False).index]
@@ -191,12 +200,7 @@ class DerivativeCheckResult:
         lines.append(f"Maximum absolute difference: {max_adiff:.6g}{abs_tol}")
         lines.append(f"Maximum relative difference: {max_rdiff:.6g}{rel_tol}")
         lines.append(rule)
-        message = "\n".join(lines)
-
-        if not self.success:
-            raise AssertionError(message)
-
-        print(message)
+        return "\n".join(lines)
 
 
 class DerivativeCheck(abc.ABC):
