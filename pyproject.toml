@@ -6,7 +6,7 @@ build-backend = "setuptools.build_meta"
 name = "fiddy"
 description = "Finite difference methods"
 readme = "README.md"
-dynamic = ["version", "optional-dependencies"]
+dynamic = ["version"]
 license = "BSD-3-Clause"
 license-files = ["LICENSE"]
 authors = [
@@ -33,6 +33,23 @@ Homepage = "https://github.com/icb-dcm/fiddy"
 Documentation = "https://fiddy.readthedocs.io"
 Repository = "https://github.com/icb-dcm/fiddy"
 "Bug Tracker" = "https://github.com/icb-dcm/fiddy/issues"
+
+[project.optional-dependencies]
+doc = [
+    "docutils<0.19",
+    "ipython",
+    "mock",
+    "nbconvert",
+    "nbsphinx",
+    "recommonmark>=0.7.1",
+    "sphinx<8",
+    "sphinx_rtd_theme",
+    "sphinx-autodoc-typehints",
+]
+examples = ["notebook", "scipy"]
+tests = ["pytest", "scipy", "sympy", "more-itertools"]
+dev = ["pre-commit", "tox"]
+all = ["fiddy[examples]", "fiddy[tests]"]
 
 [tool.setuptools.packages.find]
 include = ["fiddy*"]
