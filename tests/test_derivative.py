@@ -192,7 +192,7 @@ def test_df_includes_original_index():
 
     # The original (pre-sort) position of each direction, so patterns can
     # still be spotted once a report re-sorts by failure magnitude.
-    assert list(result.df["index"]) == list(range(6))
+    assert list(result.df["direction_index"]) == list(range(6))
 
 
 def test_assert_success_shows_all_failed_directions():

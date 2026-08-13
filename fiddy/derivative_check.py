@@ -90,7 +90,7 @@ class DerivativeCheckResult:
         # The direction's position in the original (unsorted) direction
         # order, so patterns (e.g. "the first direction is always off") can
         # still be spotted after reports re-sort by failure magnitude.
-        df.insert(0, "index", range(len(df)))
+        df.insert(0, "direction_index", range(len(df)))
         df["abs_diff"] = np.abs(df["expectation"] - df["test"])
         df["rel_diff"] = df["abs_diff"] / np.abs(df["expectation"])
         if self.atol is not None:
@@ -162,7 +162,7 @@ class DerivativeCheckResult:
             display_columns = [
                 column
                 for column in (
-                    "index",
+                    "direction_index",
                     "test",
                     "expectation",
                     "abs_diff",
