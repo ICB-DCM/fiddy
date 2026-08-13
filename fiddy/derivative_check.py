@@ -5,7 +5,11 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
-from .constants import Type
+from .constants import (
+    NUMPY_ISCLOSE_DEFAULT_ATOL,
+    NUMPY_ISCLOSE_DEFAULT_RTOL,
+    Type,
+)
 from .derivative import Derivative
 
 
@@ -288,8 +292,8 @@ class NumpyIsCloseDerivativeCheck(DerivativeCheck):
             expectation=self.expectation,
             success=success,
             # `np.isclose` defaults, in case the caller didn't override them.
-            atol=kwargs.get("atol", 1e-8),
-            rtol=kwargs.get("rtol", 1e-5),
+            atol=kwargs.get("atol", NUMPY_ISCLOSE_DEFAULT_ATOL),
+            rtol=kwargs.get("rtol", NUMPY_ISCLOSE_DEFAULT_RTOL),
             derivative=self.derivative,
         )
         return derivative_check_result
