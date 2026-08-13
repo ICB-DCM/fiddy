@@ -124,7 +124,11 @@ def test_get_derivative(point, sizes, output_shape):
 
 
 def _get_rosenbrock_check_result(
-    point, output_shape=(1,), success_checker=None, **isclose_kwargs
+    point,
+    output_shape=(1,),
+    success_checker=None,
+    corrupt_direction_indices=None,
+    **isclose_kwargs,
 ):
     function = partial(rosenbrock, output_shape=output_shape)
     expected_derivative_function = partial(
@@ -139,6 +143,12 @@ def _get_rosenbrock_check_result(
         success_checker=success_checker or Consistency(),
     )
     expected_value = expected_derivative_function(point)
+    if corrupt_direction_indices:
+        # Deliberately wrong expectation for a few directions only, so
+        # exactly those (and no others) should be reported as failed.
+        expected_value = expected_value.copy()
+        for direction_index in corrupt_direction_indices:
+            expected_value[..., direction_index] += 10
     check = NumpyIsCloseDerivativeCheck(
         derivative=derivative,
         expectation=expected_value,
@@ -195,19 +205,31 @@ def test_df_includes_original_index():
     assert list(result.df["direction_index"]) == list(range(6))
 
 
-def test_assert_success_shows_all_failed_directions():
-    point = np.full(40, 0.5)
-    result = _get_rosenbrock_check_result(point, rtol=0, atol=0)
+def test_assert_success_shows_specific_failed_directions():
+    point = np.full(6, 0.5)
+    failed_direction_indices = {1, 4}
+    result = _get_rosenbrock_check_result(
+        point,
+        rtol=1e-2,
+        corrupt_direction_indices=failed_direction_indices,
+    )
     assert not result.success
 
     with pytest.raises(AssertionError) as error:
         result.assert_success()
 
     message = str(error.value)
-    failed_ids = result.df.index[~result.df["success"]]
-    assert len(failed_ids) == 40
+    failed_ids = set(result.df.index[~result.df["success"]])
+    passed_ids = set(result.df.index) - failed_ids
+    assert failed_ids == {
+        f"direction_{index}" for index in failed_direction_indices
+    }
+    assert passed_ids
+
     for direction_id in failed_ids:
         assert direction_id in message
+    for direction_id in passed_ids:
+        assert direction_id not in message
 
 
 class _AlwaysFail(Success):
