@@ -54,6 +54,6 @@ class MethodId(str, Enum):
 
 EPSILON = 1e-5
 
-_NUMPY_ISCLOSE_PARAMETERS = inspect.signature(np.isclose).parameters
-NUMPY_ISCLOSE_DEFAULT_RTOL = _NUMPY_ISCLOSE_PARAMETERS["rtol"].default
-NUMPY_ISCLOSE_DEFAULT_ATOL = _NUMPY_ISCLOSE_PARAMETERS["atol"].default
+# Fiddy's default tolerances for numpy.isclose
+NUMPY_ISCLOSE_DEFAULT_RTOL = 1e-5
+NUMPY_ISCLOSE_DEFAULT_ATOL = 1e-8

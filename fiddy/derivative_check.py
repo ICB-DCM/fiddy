@@ -250,7 +250,13 @@ class DerivativeCheck(abc.ABC):
 class NumpyIsCloseDerivativeCheck(DerivativeCheck):
     method_id = "np.isclose"
 
-    def method(self, *args, **kwargs):
+    def method(
+        self,
+        *args,
+        atol=NUMPY_ISCLOSE_DEFAULT_ATOL,
+        rtol=NUMPY_ISCLOSE_DEFAULT_RTOL,
+        **kwargs,
+    ):
         directional_derivative_check_results = []
         for direction_index, directional_derivative in enumerate(
             self.derivative.directional_derivatives
@@ -267,6 +273,8 @@ class NumpyIsCloseDerivativeCheck(DerivativeCheck):
                 test_value,
                 expected_value,
                 *args,
+                atol=atol,
+                rtol=rtol,
                 **kwargs,
             )
             directional_derivative_check_result = (
@@ -292,8 +300,8 @@ class NumpyIsCloseDerivativeCheck(DerivativeCheck):
             expectation=self.expectation,
             success=success,
             # `np.isclose` defaults, in case the caller didn't override them.
-            atol=kwargs.get("atol", NUMPY_ISCLOSE_DEFAULT_ATOL),
-            rtol=kwargs.get("rtol", NUMPY_ISCLOSE_DEFAULT_RTOL),
+            atol=atol,
+            rtol=rtol,
             derivative=self.derivative,
         )
         return derivative_check_result
