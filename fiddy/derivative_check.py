@@ -26,25 +26,13 @@ class DirectionalDerivativeCheckResult:
 
 
 def _worst_element(value) -> float:
-    """The largest element of a (possibly scalar) per-direction diff value.
-
-    `test`/`expectation`/`abs_diff`/`rel_diff` are per-direction, but each
-    may itself be an array (for a multi-element output), so a single
-    representative, sortable/formattable scalar is needed for the report.
+    """The largest error across all outputs for a single directional derivative."""
     """
     return float(np.max(np.atleast_1d(value)))
 
 
-def _format_value(value) -> str:
-    """A compact, fixed-precision rendering of a per-direction value.
-
-    Values are typically length-1 arrays (a single scalar output stored as
-    an array, per `fiddy`'s "functions always return `np.ndarray`"
-    convention). Rendered as a plain number instead of pandas' default
-    full-precision array repr (e.g. ``[-0.999937859091915]``), which is
-    unreadable in a log. Genuinely multi-element outputs fall back to a
-    short, fixed-precision array string.
-    """
+def _get_printable_value(value) -> str:
+    """Round scalar(s) for printing."""
     array = np.atleast_1d(value)
     if array.size == 1:
         return f"{float(array.reshape(-1)[0]):.6g}"
@@ -114,12 +102,6 @@ class DerivativeCheckResult:
 
     def assert_success(self, always_print: bool = False) -> None:
         """Assert that this derivative check succeeded.
-
-        Does nothing if the check succeeded (unless ``always_print`` is
-        set), and raises an ``AssertionError`` with a human-readable
-        summary otherwise. The summary is designed to be read as
-        plain-text CI log output, which may be the only diagnostic
-        available for a failure.
 
         Args:
             always_print:
