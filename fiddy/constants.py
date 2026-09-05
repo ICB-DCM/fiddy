@@ -1,59 +1,31 @@
-import inspect
-from collections.abc import Callable
-from enum import Enum
-from typing import Any, Union
+"""Shared type-annotation aliases used throughout the package."""
+
+from collections.abc import Callable, Sequence
 
 import numpy as np
 from numpy.typing import NDArray
 
-__all__ = [
-    "Type",
-    "MethodId",
-    "NUMPY_ISCLOSE_DEFAULT_RTOL",
-    "NUMPY_ISCLOSE_DEFAULT_ATOL",
-]
+__all__ = ["Type"]
 
 
 class Type:
     """Type annotation variables."""
 
-    # The size is applied as the Euclidean distance in the
-    # specified direction, between the point and the stepped point
     SCALAR = np.float64
     ARRAY = NDArray[SCALAR]
     DIRECTION = ARRAY
-    SIZE = SCALAR  # strictly positive TODO enforce?
     POINT = ARRAY
-    DIRECTIONAL_DERIVATIVE = ARRAY
-    DERIVATIVE = NDArray[DIRECTIONAL_DERIVATIVE]
-    # Currently only supports scalar-valued functions with
-    # vector input of arbitrary dimension
+    #: The flat, canonical form returned by :meth:`fiddy.Function.__call__`.
     FUNCTION_OUTPUT = ARRAY
+    #: What a *raw*, user-supplied function may return before it is wrapped
+    #: by :class:`fiddy.Function`: either a plain array, or a dict of named
+    #: arrays (e.g. ``{"x": ..., "y": ..., "llh": ...}``), which gets
+    #: flattened into `FUNCTION_OUTPUT` -- see :mod:`fiddy.output`.
+    RAW_FUNCTION_OUTPUT = ARRAY | dict[str, ARRAY]
     FUNCTION = Callable[[POINT], FUNCTION_OUTPUT]
-    DERIVATIVE_FUNCTION = Callable[[POINT], DERIVATIVE]
-    DIRECTIONAL_DERIVATIVE_FUNCTION = Callable[[POINT], DIRECTIONAL_DERIVATIVE]
-    # TODO rename analysis and success to e.g.
-    #      - "ANALYSE_DIRECTIONAL_DERIVATIVE_METHOD" and
-    #      - "ANALYSE_DERIVATIVE_METHOD" and
-    ANALYSIS_METHOD = Callable[["DirectionalDerivative"], Any]  # noqa: F821
-    SUCCESS_CHECKER = Callable[["Derivative"], bool | Any]  # noqa: F821
-
-
-# FIXME rename, since this can be the name of the base class in `derivative.py`
-# FIXME use Difference instead, then i.e. Extrapolation too
-class MethodId(str, Enum):
-    """Finite different method IDs."""
-
-    BACKWARD = "backward"
-    CENTRAL = "central"
-    FORWARD = "forward"
-    RICHARDSON = "richardson"
-    # richardson
-    # five point?
-
-
-EPSILON = 1e-5
-
-# Fiddy's default tolerances for numpy.isclose
-NUMPY_ISCLOSE_DEFAULT_RTOL = 1e-5
-NUMPY_ISCLOSE_DEFAULT_ATOL = 1e-8
+    #: Anything :func:`numpy.random.default_rng` accepts to seed a fresh
+    #: `Generator`, per `SPEC 7
+    #: <https://scientific-python.org/specs/spec-0007/>`_.
+    SEED_LIKE = int | np.integer | Sequence[int] | np.random.SeedSequence
+    #: An already-constructed random generator, per SPEC 7.
+    RNG_LIKE = np.random.Generator | np.random.BitGenerator

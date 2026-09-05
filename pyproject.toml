@@ -46,8 +46,8 @@ doc = [
     "sphinx_rtd_theme",
     "sphinx-autodoc-typehints",
 ]
-examples = ["notebook", "scipy"]
-tests = ["pytest", "scipy", "sympy", "more-itertools"]
+examples = ["notebook", "scipy", "matplotlib"]
+tests = ["pytest", "scipy", "matplotlib"]
 dev = ["pre-commit", "tox"]
 all = ["fiddy[examples]", "fiddy[tests]"]
 

@@ -1,0 +1,75 @@
+% BibTeX entries for the algorithms/conventions fiddy's docstrings cite by
+% key. Each entry's citation key is referenced directly in the relevant
+% docstring in fiddy/*.py, e.g. "(see doc/references.bib, key MoreWild2011)".
+
+@article{MoreWild2011,
+  author  = {Mor{\'e}, Jorge J. and Wild, Stefan M.},
+  title   = {Estimating Computational Noise},
+  journal = {SIAM Journal on Scientific Computing},
+  year    = {2011},
+  volume  = {33},
+  number  = {3},
+  pages   = {1292--1314},
+  doi     = {10.1137/100786125},
+  url     = {https://optimization-online.org/wp-content/uploads/2010/03/2557.pdf},
+  note    = {The ECNoise algorithm: empirical noise-floor estimation from a finite-difference table's plateau, no model-specific information required.},
+}
+
+@misc{Derrico2006derivest,
+  author = {D'Errico, John},
+  title  = {{DERIVEST}: {A}daptive {R}obust {N}umerical {D}ifferentiation},
+  year   = {2006},
+  note   = {MATLAB implementation, later ported to Python as \texttt{numdifftools}.},
+  url    = {https://numdifftools.readthedocs.io/en/stable/src/numerical/derivest.html},
+}
+
+@book{BurdenFaires2015,
+  author    = {Burden, Richard L. and Faires, J. Douglas and Burden, Annette M.},
+  title     = {Numerical Analysis},
+  edition   = {10th},
+  publisher = {Cengage Learning},
+  year      = {2015},
+  note      = {Neville's algorithm (polynomial interpolation via a divided-difference recursion), Section 3.2.},
+}
+
+@book{DennisSchnabel1983,
+  author    = {Dennis, John E. and Schnabel, Robert B.},
+  title     = {Numerical Methods for Unconstrained Optimization and Nonlinear Equations},
+  publisher = {Prentice-Hall},
+  year      = {1983},
+  note      = {Section 5.4: the classical central-difference truncation/rounding trade-off, {\(}h^\ast \sim \varepsilon^{1/3}{\)} for noise level {\(}\varepsilon{\)}.},
+}
+
+@misc{Finitediffjl,
+  title = {{FiniteDiff.jl}: Step size selection},
+  note  = {Documents the practical hybrid \texttt{max(relstep*|x|, absstep)} step-size scaling.},
+  url   = {https://docs.sciml.ai/FiniteDiff/dev/epsilons/},
+}
+
+@misc{Pnd,
+  title  = {{Pnd}: Numerical Differentiation with Error Estimation and Benchmarking},
+  author = {{CRAN}},
+  note   = {R package; parallel batch step-size-ladder architecture with several interchangeable step-size algorithms (Curtis--Reid, Dumontet--Vignes, Stepleman--Winarsky, AutoDX, ...).},
+  url    = {https://cran.r-project.org/web/packages/pnd/vignettes/step-size-selection.html},
+}
+
+@misc{TorchGradcheck,
+  title  = {\texttt{torch.autograd.gradcheck}},
+  author = {{PyTorch}},
+  note   = {\texttt{nondet\_tol}: tolerates a function returning slightly different values on repeated calls at the same point. \texttt{fast\_mode}: checks via a few random-direction projections instead of one evaluation per parameter.},
+  url    = {https://docs.pytorch.org/docs/stable/generated/torch.autograd.gradcheck.gradgradcheck.html},
+}
+
+@misc{JaxCheckGrads,
+  title  = {\texttt{jax.test\_util.check\_grads}},
+  author = {{JAX}},
+  note   = {Single-random-direction default for cheap gradient checks.},
+  url    = {https://docs.jax.dev/en/latest/_autosummary/jax.test_util.check_grads.html},
+}
+
+@misc{Cs231n,
+  title  = {{CS231n} Convolutional Neural Networks for Visual Recognition: Gradient checks},
+  author = {Karpathy, Andrej and {Stanford CS231n staff}},
+  note   = {Symmetric relative error {\(}|a-n| / \max(|a|,|n|,\varepsilon){\)}; mismatches near kinks (non-differentiable points) are expected, not bugs; a single global tolerance is not appropriate everywhere.},
+  url    = {https://cs231n.github.io/neural-networks-3/},
+}

@@ -4,10 +4,10 @@ fiddy package
 Submodules
 ----------
 
-fiddy.analysis module
----------------------
+fiddy.check module
+-------------------
 
-.. automodule:: fiddy.analysis
+.. automodule:: fiddy.check
    :members:
    :undoc-members:
    :show-inheritance:
@@ -20,26 +20,34 @@ fiddy.constants module
    :undoc-members:
    :show-inheritance:
 
-fiddy.derivative module
+fiddy.discontinuity module
+---------------------------
+
+.. automodule:: fiddy.discontinuity
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+fiddy.estimate module
 -----------------------
 
-.. automodule:: fiddy.derivative
+.. automodule:: fiddy.estimate
    :members:
    :undoc-members:
    :show-inheritance:
 
-fiddy.derivative\_check module
-------------------------------
+fiddy.executor module
+-----------------------
 
-.. automodule:: fiddy.derivative_check
+.. automodule:: fiddy.executor
    :members:
    :undoc-members:
    :show-inheritance:
 
-fiddy.directional\_derivative module
-------------------------------------
+fiddy.extrapolation module
+-----------------------------
 
-.. automodule:: fiddy.directional_derivative
+.. automodule:: fiddy.extrapolation
    :members:
    :undoc-members:
    :show-inheritance:
@@ -52,26 +60,34 @@ fiddy.function module
    :undoc-members:
    :show-inheritance:
 
-fiddy.numpy module
-------------------
-
-.. automodule:: fiddy.numpy
-   :members:
-   :undoc-members:
-   :show-inheritance:
-
-fiddy.step module
------------------
-
-.. automodule:: fiddy.step
-   :members:
-   :undoc-members:
-   :show-inheritance:
-
-fiddy.success module
+fiddy.noise module
 --------------------
 
-.. automodule:: fiddy.success
+.. automodule:: fiddy.noise
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+fiddy.output module
+---------------------
+
+.. automodule:: fiddy.output
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+fiddy.plotting module
+-----------------------
+
+.. automodule:: fiddy.plotting
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+fiddy.step\_size module
+-------------------------
+
+.. automodule:: fiddy.step_size
    :members:
    :undoc-members:
    :show-inheritance:
