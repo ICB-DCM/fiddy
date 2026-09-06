@@ -48,7 +48,13 @@ from .discontinuity import DiscontinuityCheck, check_discontinuity
 from .executor import Executor, SequentialExecutor
 from .extrapolation import ExtrapolationResult, extrapolate_central_differences
 from .function import Function
-from .noise import NoiseFloor, estimate_model_noise_floor
+from .noise import (
+    NoiseFloor,
+    _analyze_noise_table,
+    _noise_floor_probe_points,
+    estimate_model_noise_floor,
+    noise_floor_is_confident,
+)
 from .output import OutputSchema
 from .step_size import build_step_ladder
 
@@ -79,6 +85,132 @@ def _ensure_function(function: Type.FUNCTION) -> Function:
     if isinstance(function, Function):
         return function
     return Function(function)
+
+
+def _validate_point_in_bounds(
+    point: np.ndarray, bounds: Type.BOUNDS | None
+) -> None:
+    """Raise a clear error if `point` itself already violates `bounds`,
+    rather than silently letting bounds-aware clamping (see
+    :func:`fiddy.step_size.clamp_step_to_bounds`) collapse every probe/
+    ladder step down to zero and produce a confusing, uniformly
+    "noise_dominated" result with no indication of the real cause.
+    Mirrors `scipy.optimize.approx_derivative`'s own behavior for an
+    infeasible `x0`. Found via a real regression: a caller's own jittered
+    starting point pushed one parameter past its declared bound, silently
+    crushing every direction's noise-floor estimate instead of raising.
+
+    :param point: The point to validate.
+    :param bounds: `(lower, upper)`, or `None` to skip validation.
+    :raises ValueError: If any component of `point` is outside `bounds`.
+    """
+    if bounds is None:
+        return
+    lower, upper = bounds
+    lower = np.asarray(lower, dtype=float)
+    upper = np.asarray(upper, dtype=float)
+    violated = (point < lower) | (point > upper)
+    if np.any(violated):
+        bad = np.where(violated)[0]
+        raise ValueError(
+            "`point` violates the supplied `bounds` at component index/"
+            f"indices {list(bad)}: point={point[bad]}, "
+            f"lower={lower[bad]}, upper={upper[bad]}. A finite-difference "
+            "step cannot be safely clamped to a domain the starting "
+            "point itself is already outside of."
+        )
+
+
+def _estimate_noise_floors_per_direction(
+    function: Function,
+    point: np.ndarray,
+    directions: list[np.ndarray],
+    executor: Executor,
+    bounds: Type.BOUNDS | None,
+) -> list[NoiseFloor]:
+    """Estimate one independent, bounds-clamped noise floor per direction,
+    from one *combined* batch dispatch across every direction's own probe
+    points -- per fiddy's batch-then-analyze design, this is one
+    `executor` call for all `len(directions)` directions' probes, not one
+    per direction (see :func:`fiddy.noise._noise_floor_probe_points`).
+
+    :param function: The blackbox function (already wrapped).
+    :param point: The point to probe around.
+    :param directions: The directions to probe along, one noise floor
+        each.
+    :param executor: How to dispatch the combined probe batch.
+    :param bounds: Optional per-parameter valid domain.
+    :return: One :class:`NoiseFloor` per direction, in the same order.
+    """
+    n_points = 15
+    all_probe_points: list[np.ndarray] = []
+    for d in directions:
+        all_probe_points.extend(
+            _noise_floor_probe_points(point, d, None, n_points, bounds)
+        )
+    values = (
+        np.array([np.asarray(v) for v in executor(function, all_probe_points)])
+        .reshape(len(all_probe_points), -1)
+        .astype(float)
+    )
+
+    noises = []
+    offset = 0
+    for _ in directions:
+        chunk = values[offset : offset + n_points]
+        offset += n_points
+        noises.append(_analyze_noise_table(chunk, 3.0))
+    return noises
+
+
+def _resolve_noise_floors(
+    function: Function,
+    point: np.ndarray,
+    directions: list[np.ndarray],
+    noise_floor_strategy: str,
+    executor: Executor,
+    bounds: Type.BOUNDS | None,
+) -> list[NoiseFloor]:
+    """Resolve one :class:`NoiseFloor` per direction, per
+    `noise_floor_strategy` -- see :func:`estimate_gradient`'s
+    `noise_floor_strategy` parameter for the full rationale.
+
+    :param function: The blackbox function (already wrapped).
+    :param point: The point to probe around.
+    :param directions: The directions each result is needed for.
+    :param noise_floor_strategy: `"shared"`, `"per_direction"`, or
+        `"auto"`.
+    :param executor: How to dispatch probe evaluations.
+    :param bounds: Optional per-parameter valid domain.
+    :return: One :class:`NoiseFloor` per direction, in the same order
+        (the same shared object repeated, for `"shared"`/un-escalated
+        `"auto"`).
+    :raises ValueError: If `noise_floor_strategy` isn't one of the three
+        values above.
+    """
+    if noise_floor_strategy not in ("shared", "per_direction", "auto"):
+        raise ValueError(
+            "`noise_floor_strategy` must be one of 'shared', "
+            f"'per_direction', 'auto'; got {noise_floor_strategy!r}."
+        )
+
+    if noise_floor_strategy == "per_direction":
+        return _estimate_noise_floors_per_direction(
+            function, point, directions, executor, bounds
+        )
+
+    shared = estimate_model_noise_floor(
+        function, point, executor=executor, bounds=bounds
+    )
+    if noise_floor_strategy == "shared" or noise_floor_is_confident(shared):
+        return [shared] * len(directions)
+    # "auto", and the shared probe came back unconfident/degenerate --
+    # escalate to an independent probe per direction (see
+    # `fiddy.noise.noise_floor_is_confident`'s own docstring for why this
+    # can happen and why it's not safe to use as-is).
+    return _estimate_noise_floors_per_direction(
+        function, point, directions, executor, bounds
+    )
 
 
 @dataclass
@@ -345,6 +477,8 @@ def estimate_directional_derivative(
     nondet_tol: float = 0.0,
     n_rungs: int = 8,
     step_ratio: float = 2.0,
+    bounds: Type.BOUNDS | None = None,
+    noise_floor_strategy: str = "auto",
     executor: Executor | None = None,
 ) -> DerivativeEstimate:
     """Estimate a directional derivative with no user-supplied step size.
@@ -369,6 +503,16 @@ def estimate_directional_derivative(
     :param n_rungs: Forwarded to :func:`fiddy.step_size.build_step_ladder`.
     :param step_ratio: Forwarded to
         :func:`fiddy.step_size.build_step_ladder`.
+    :param bounds: Optional per-parameter valid domain, forwarded to both
+        the noise-floor probe and :func:`fiddy.step_size.build_step_ladder`
+        -- see :func:`fiddy.step_size.clamp_step_to_bounds`. `None` (the
+        default) disables clamping entirely. `point` itself must already
+        satisfy `bounds`; a violation raises `ValueError` rather than
+        silently collapsing every step to zero.
+    :param noise_floor_strategy: See :func:`estimate_gradient` -- with
+        only one direction here, `"per_direction"`/escalated `"auto"`
+        probes along `direction` itself rather than the shared,
+        all-ones default.
     :param executor: How to dispatch the batch of ``2 * n_rungs + 1``
         ladder evaluations (``f(x0)``, ``f(x0 +/- h)`` per rung) -- e.g.
         :class:`fiddy.executor.JoblibExecutor` to run them in parallel.
@@ -378,15 +522,25 @@ def estimate_directional_derivative(
         single batch per phase, so switching executors changes wall-clock
         time only, never the result.
     :return: The directional derivative estimate.
+    :raises ValueError: If `point` violates `bounds`, or
+        `noise_floor_strategy` is invalid.
     """
     if executor is None:
         executor = SequentialExecutor()
     function = _ensure_function(function)
     point = np.asarray(point, dtype=float)
     direction = np.asarray(direction, dtype=float)
+    _validate_point_in_bounds(point, bounds)
 
     if noise_floor is None:
-        noise = estimate_model_noise_floor(function, point, executor=executor)
+        noise = _resolve_noise_floors(
+            function,
+            point,
+            [direction],
+            noise_floor_strategy,
+            executor,
+            bounds,
+        )[0]
     else:
         noise = NoiseFloor(
             sigma=noise_floor, level=None, confident=True, sigmas=[]
@@ -408,6 +562,7 @@ def estimate_directional_derivative(
         effective_sigma,
         n_rungs=n_rungs,
         step_ratio=step_ratio,
+        bounds=bounds,
     )
 
     # Every point the whole ladder needs is decided upfront and dispatched
@@ -441,11 +596,13 @@ def estimate_gradient(
     nondet_tol: float = 0.0,
     n_rungs: int = 8,
     step_ratio: float = 2.0,
+    bounds: Type.BOUNDS | None = None,
+    noise_floor_strategy: str = "auto",
     executor: Executor | None = None,
 ) -> list[DerivativeEstimate]:
     """Estimate derivatives along several directions at once.
 
-    Shares one noise-floor probe across every direction (see
+    Shares one noise-floor probe across every direction by default (see
     :func:`fiddy.noise.estimate_model_noise_floor`) and dispatches *every*
     direction's ladder evaluations as a single combined batch through
     `executor` -- checking N directions costs one batch dispatch, not N.
@@ -464,9 +621,45 @@ def estimate_gradient(
         identically to every direction.
     :param step_ratio: See :func:`estimate_directional_derivative` --
         applied identically to every direction.
+    :param bounds: See :func:`estimate_directional_derivative` -- applied
+        identically to every direction.
+    :param noise_floor_strategy: How to estimate the noise floor(s) this
+        gradient's directions are checked with:
+
+        - ``"shared"``: one probe along :func:`fiddy.noise.
+          default_probe_direction`, reused for every direction (today's
+          only behavior, cheapest -- one 15-point probe regardless of
+          how many directions are checked).
+        - ``"per_direction"``: an independent, bounds-clamped probe along
+          *each* direction, from one combined batch dispatch (not one
+          `executor` round per direction). Costs roughly `32/17 ~ 1.9x`
+          the evaluations of `"shared"` for `n_rungs=8` as the number of
+          directions grows (the per-direction step-size *ladder* --
+          already one per direction even under `"shared"` -- dominates
+          total cost once there are more than a handful of directions;
+          this is not the "Nx" blowup a naive per-parameter noise floor
+          might suggest).
+        - ``"auto"`` (the default): try `"shared"` first, at no extra
+          cost; if it comes back unconfident or degenerate (see
+          :func:`fiddy.noise.noise_floor_is_confident`), transparently
+          re-probe `"per_direction"` instead of silently returning a
+          crushed, spuriously tight tolerance for every direction.
+
+        Found necessary in practice: a *single* parameter close to its
+        own declared `bounds` can crush the *shared* probe's step down
+        to near-zero for *every* direction at once (not just that
+        parameter's own), even though the parameter itself may be
+        perfectly valid -- confirmed on real PEtab benchmark models,
+        where this turned an otherwise-correct check into 100%
+        "noise_dominated" results. `"per_direction"`/escalated `"auto"`
+        isolates this: only the genuinely bound-constrained directions
+        end up honestly uncertain, every other direction resolves
+        cleanly and confidently.
     :param executor: See :func:`estimate_directional_derivative` --
         applied identically to every direction.
     :return: One `DerivativeEstimate` per direction, in the same order.
+    :raises ValueError: If `point` violates `bounds`, or
+        `noise_floor_strategy` is invalid.
     """
     if executor is None:
         executor = SequentialExecutor()
@@ -475,27 +668,38 @@ def estimate_gradient(
     if directions is None:
         directions = list(np.eye(len(point)))
     directions = [np.asarray(d, dtype=float) for d in directions]
+    _validate_point_in_bounds(point, bounds)
 
     if noise_floor is None:
-        noise = estimate_model_noise_floor(function, point, executor=executor)
+        noises = _resolve_noise_floors(
+            function, point, directions, noise_floor_strategy, executor, bounds
+        )
     else:
-        noise = NoiseFloor(
+        shared = NoiseFloor(
             sigma=noise_floor, level=None, confident=True, sigmas=[]
         )
+        noises = [shared] * len(directions)
     # Only the first (flattened) output component is estimated here (see
     # module docstring) -- `estimate_jacobian` is the multi-output entry
     # point.
-    noise = _noise_floor_component(noise, 0)
-    effective_sigma = max(noise.sigma, nondet_tol)
+    noises = [_noise_floor_component(n, 0) for n in noises]
+    effective_sigmas = [max(n.sigma, nondet_tol) for n in noises]
 
     if tol is None:
-        tol = _default_tol(effective_sigma)
+        tols = [_default_tol(s) for s in effective_sigmas]
+    else:
+        tols = [tol] * len(directions)
 
     ladders = [
         build_step_ladder(
-            point, d, effective_sigma, n_rungs=n_rungs, step_ratio=step_ratio
+            point,
+            d,
+            effective_sigmas[i],
+            n_rungs=n_rungs,
+            step_ratio=step_ratio,
+            bounds=bounds,
         )
-        for d in directions
+        for i, d in enumerate(directions)
     ]
 
     # f(x0) does not depend on direction, so it is evaluated once and
@@ -512,14 +716,14 @@ def estimate_gradient(
     f_0 = batch_results[0]
     results = []
     offset = 1
-    for ladder in ladders:
+    for i, ladder in enumerate(ladders):
         n = len(ladder)
         f_plus = batch_results[offset : offset + n]
         f_minus = batch_results[offset + n : offset + 2 * n]
         offset += 2 * n
         results.append(
             _estimate_from_ladder(
-                ladder, f_0, f_plus, f_minus, noise, tol, nondet_tol
+                ladder, f_0, f_plus, f_minus, noises[i], tols[i], nondet_tol
             )[0]
         )
     return results
@@ -612,6 +816,8 @@ def estimate_jacobian(
     nondet_tol: float = 0.0,
     n_rungs: int = 8,
     step_ratio: float = 2.0,
+    bounds: Type.BOUNDS | None = None,
+    noise_floor_strategy: str = "auto",
     executor: Executor | None = None,
 ) -> JacobianEstimate:
     """Estimate derivatives of every output component along several
@@ -652,17 +858,27 @@ def estimate_jacobian(
         identically to every direction and output component.
     :param step_ratio: See :func:`estimate_directional_derivative` --
         applied identically to every direction and output component.
+    :param bounds: See :func:`estimate_directional_derivative` -- applied
+        identically to every direction and output component.
+    :param noise_floor_strategy: See :func:`estimate_gradient` -- applied
+        identically to every direction; each direction's own probe (under
+        `"per_direction"`/escalated `"auto"`) measures every output
+        component at once, same as the shared probe already does, so
+        multi-output support costs nothing extra here either.
     :param executor: See :func:`estimate_directional_derivative` --
         applied identically to every direction and output component.
     :return: The Jacobian estimate, indexed
         `[output_index][direction_index]` (or by output name, if
         `function` returned a named dict -- see
         :meth:`JacobianEstimate.output`).
+    :raises ValueError: If `point` violates `bounds`, or
+        `noise_floor_strategy` is invalid.
     """
     if executor is None:
         executor = SequentialExecutor()
     function = _ensure_function(function)
     point = np.asarray(point, dtype=float)
+    _validate_point_in_bounds(point, bounds)
     # Evaluated directly (not through `executor`) so `function.schema` is
     # guaranteed to be populated on *this* (main-process) object: with
     # `JoblibExecutor`, batch evaluations run in separate worker
@@ -679,11 +895,14 @@ def estimate_jacobian(
     directions = [np.asarray(d, dtype=float) for d in directions]
 
     if noise_floor is None:
-        noise = estimate_model_noise_floor(function, point, executor=executor)
+        noises = _resolve_noise_floors(
+            function, point, directions, noise_floor_strategy, executor, bounds
+        )
     else:
-        noise = NoiseFloor(
+        shared = NoiseFloor(
             sigma=noise_floor, level=None, confident=True, sigmas=[]
         )
+        noises = [shared] * len(directions)
 
     # The step-size ladder is shared across every output component of a
     # given direction (one batch of evaluations serves them all -- see
@@ -691,18 +910,20 @@ def estimate_jacobian(
     # even when individual outputs' noise floors differ hugely: the max
     # keeps the ladder safe (large enough) for the noisiest component, at
     # the cost of some sub-optimality for quieter ones.
-    ladder_sigma = float(np.max(np.atleast_1d(noise.sigma)))
-    effective_sigma_for_ladder = max(ladder_sigma, nondet_tol)
+    effective_sigmas_for_ladder = [
+        max(float(np.max(np.atleast_1d(n.sigma))), nondet_tol) for n in noises
+    ]
 
     ladders = [
         build_step_ladder(
             point,
             d,
-            effective_sigma_for_ladder,
+            effective_sigmas_for_ladder[i],
             n_rungs=n_rungs,
             step_ratio=step_ratio,
+            bounds=bounds,
         )
-        for d in directions
+        for i, d in enumerate(directions)
     ]
 
     batch_points = []
@@ -714,17 +935,21 @@ def estimate_jacobian(
         [np.asarray(v) for v in executor(function, batch_points)]
     ).reshape(len(batch_points), -1)
 
-    noise_sigma_arr = np.broadcast_to(
-        np.atleast_1d(noise.sigma), (n_outputs,)
-    ).astype(float)
-    if tol is None:
-        tol_arr = _default_tol(np.maximum(noise_sigma_arr, nondet_tol))
-    else:
-        tol_arr = np.full(n_outputs, float(tol))
+    tol_arrs = []
+    for n_floor in noises:
+        noise_sigma_arr = np.broadcast_to(
+            np.atleast_1d(n_floor.sigma), (n_outputs,)
+        ).astype(float)
+        if tol is None:
+            tol_arrs.append(
+                _default_tol(np.maximum(noise_sigma_arr, nondet_tol))
+            )
+        else:
+            tol_arrs.append(np.full(n_outputs, float(tol)))
 
     per_direction: list[list[DerivativeEstimate]] = []
     offset = 0
-    for ladder in ladders:
+    for i, ladder in enumerate(ladders):
         n = len(ladder)
         f_plus = batch_results[offset : offset + n]
         f_minus = batch_results[offset + n : offset + 2 * n]
@@ -735,10 +960,10 @@ def estimate_jacobian(
                 f_0,
                 f_plus,
                 f_minus,
-                noise,
-                tol_arr,
+                noises[i],
+                tol_arrs[i],
                 nondet_tol,
-                discontinuity_noise_sigma=effective_sigma_for_ladder,
+                discontinuity_noise_sigma=effective_sigmas_for_ladder[i],
             )
         )
 

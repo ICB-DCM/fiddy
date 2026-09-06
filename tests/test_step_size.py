@@ -1,6 +1,6 @@
 import numpy as np
 
-from fiddy.step_size import build_step_ladder
+from fiddy.step_size import build_step_ladder, clamp_step_to_bounds
 
 
 def test_ladder_shape_and_ordering():
@@ -82,3 +82,85 @@ def test_zero_noise_floor_does_not_collapse_the_ladder_to_zero():
     direction = np.array([1.0])
     ladder = build_step_ladder(point, direction, noise_floor=0.0)
     assert np.all(ladder > 0)
+
+
+def test_clamp_step_to_bounds_is_a_noop_without_bounds():
+    point = np.array([1.0])
+    direction = np.array([1.0])
+    assert clamp_step_to_bounds(point, direction, h=10.0, bounds=None) == 10.0
+
+
+def test_clamp_step_to_bounds_shrinks_for_a_tighter_bound():
+    point = np.array([1.0])
+    direction = np.array([1.0])
+    bounds = (np.array([0.0]), np.array([1.2]))
+
+    h = clamp_step_to_bounds(point, direction, h=10.0, bounds=bounds)
+
+    # Forward: point + h <= 1.2 -> h <= 0.2. Backward: point - h >= 0.0 ->
+    # h <= 1.0. The forward (tighter) constraint wins.
+    assert np.isclose(h, 0.2)
+
+
+def test_clamp_step_to_bounds_is_a_noop_for_a_looser_bound():
+    point = np.array([1.0])
+    direction = np.array([1.0])
+    bounds = (np.array([-100.0]), np.array([100.0]))
+
+    h = clamp_step_to_bounds(point, direction, h=10.0, bounds=bounds)
+
+    assert h == 10.0
+
+
+def test_clamp_step_to_bounds_uses_the_tightest_component():
+    point = np.array([1.0, 5.0])
+    direction = np.array([1.0, 1.0])
+    # Component 0 allows up to 5.0 either way; component 1 is nearly
+    # against its own upper bound, allowing only 0.1.
+    bounds = (np.array([-10.0, -10.0]), np.array([6.0, 5.1]))
+
+    h = clamp_step_to_bounds(point, direction, h=10.0, bounds=bounds)
+
+    assert np.isclose(h, 0.1)
+
+
+def test_clamp_step_to_bounds_ignores_zero_direction_components():
+    point = np.array([1.0, 5.0])
+    direction = np.array([1.0, 0.0])
+    # Component 1 is not perturbed at all (direction is 0 there), so its
+    # own tight bound must not constrain the step.
+    bounds = (np.array([-10.0, 5.0]), np.array([6.0, 5.0]))
+
+    h = clamp_step_to_bounds(point, direction, h=10.0, bounds=bounds)
+
+    # Only component 0 constrains: forward <= 5.0, backward <= 11.0.
+    assert np.isclose(h, 5.0)
+
+
+def test_clamp_step_to_bounds_floors_at_zero_when_already_at_the_bound():
+    point = np.array([1.0])
+    direction = np.array([1.0])
+    bounds = (np.array([0.0]), np.array([1.0]))
+
+    h = clamp_step_to_bounds(point, direction, h=10.0, bounds=bounds)
+
+    assert h == 0.0
+
+
+def test_build_step_ladder_respects_bounds():
+    """Regression test for the unscaled-parameter-domain failure mode
+    (e.g. a PEtab model's log10-scale parameter requiring a strictly
+    positive linear value): without `bounds`, a large enough noise floor
+    can size a step that pushes the evaluated point outside a known
+    valid domain; with `bounds` supplied, every rung of the ladder must
+    stay within it."""
+    point = np.array([1.0])
+    direction = np.array([1.0])
+    bounds = (np.array([0.5]), np.array([1.5]))
+
+    ladder = build_step_ladder(
+        point, direction, noise_floor=1e6, bounds=bounds
+    )
+
+    assert np.all(point[0] + ladder <= 1.5)
+    assert np.all(point[0] - ladder >= 0.5)

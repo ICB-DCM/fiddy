@@ -344,3 +344,133 @@ def test_estimate_jacobian_noise_floor_differs_per_output():
     assert jacobian.output("noisy")[0].status == "converged"
     assert jacobian.output("smooth")[0].status == "converged"
     assert abs(jacobian.output("smooth")[0].value - (-math.sin(0.7))) < 1e-6
+
+
+def _bound_crushed_shared_probe_setup():
+    """A function/point/bounds combination that reliably (deterministically,
+    not by numerical luck) crushes the *shared*, all-ones noise-floor
+    probe: one dummy component (`x[2]`) sits exactly at its own declared
+    upper bound, giving it zero room in the direction the shared probe
+    would perturb it -- `fiddy.step_size.clamp_step_to_bounds` then
+    clamps the *whole* shared step to `0`, so every probe point evaluates
+    identically and the plateau-detection heuristic reports a spuriously
+    confident-looking `sigma=0.0` (see `fiddy.noise.noise_floor_is_confident`).
+    `x[0]` is a large-magnitude dummy component (drives the shared probe's
+    step size via the dot product with the all-ones direction, but does
+    not otherwise affect `f`); only `x[1]`'s own direction is checked --
+    it is not near any bound and has a perfectly ordinary, resolvable
+    noisy derivative, but is *cross-contaminated* by `x[2]`'s tightness
+    under the shared probe. Regression case for a real failure found on
+    `Boehm_JProteomeRes2014`/`Weber_BMC2015` (a parameter close to its
+    own bound crushing every other direction's noise floor too).
+
+    :return: `(f, point, bounds, directions)`, ready to pass to
+        `estimate_gradient`.
+    """
+
+    def f(x):
+        return np.array([x[1] ** 2 + deterministic_noise(x[1], 1e-6)])
+
+    point = np.array([1e4, 1.0, 1.0])
+    bounds = (
+        np.array([-1e5, -10.0, -10.0]),
+        np.array([1e5, 10.0, 1.0]),  # x[2] exactly at its own upper bound
+    )
+    directions = [np.array([0.0, 1.0, 0.0])]
+    return f, point, bounds, directions
+
+
+def test_shared_noise_floor_strategy_can_be_crushed_by_an_unrelated_bound():
+    """Regression test for the failure mode `noise_floor_strategy` exists
+    to fix: with the (still-available, opt-in) `"shared"` strategy, a
+    single unrelated component sitting at its own bound crushes the
+    noise floor for *every* direction, including this well-behaved one --
+    turning a resolvable derivative into a falsely `"noise_dominated"`
+    result."""
+    f, point, bounds, directions = _bound_crushed_shared_probe_setup()
+    result = estimate_gradient(
+        f,
+        point,
+        directions=directions,
+        bounds=bounds,
+        noise_floor_strategy="shared",
+    )[0]
+    assert result.status == "noise_dominated"
+
+
+def test_auto_noise_floor_strategy_escalates_when_shared_is_crushed():
+    """`"auto"` (the default) must recover from exactly the failure
+    demonstrated in
+    `test_shared_noise_floor_strategy_can_be_crushed_by_an_unrelated_bound`,
+    matching `"per_direction"`'s own (correct) result."""
+    f, point, bounds, directions = _bound_crushed_shared_probe_setup()
+    auto_result = estimate_gradient(
+        f, point, directions=directions, bounds=bounds
+    )[0]
+    per_direction_result = estimate_gradient(
+        f,
+        point,
+        directions=directions,
+        bounds=bounds,
+        noise_floor_strategy="per_direction",
+    )[0]
+    assert auto_result.status == "converged"
+    assert abs(auto_result.value - 2.0) < 1e-3
+    assert auto_result.value == per_direction_result.value
+
+
+def test_noise_floor_strategy_auto_matches_shared_when_not_crushed():
+    """`"auto"` must cost/behave identically to `"shared"` whenever the
+    shared probe is already confident -- no silent behavior change for
+    the common case this whole engine was already validated against."""
+
+    def f(x):
+        return np.array([math.sin(x[0])])
+
+    point = np.array([0.6])
+    shared_result = estimate_directional_derivative(
+        f, point, np.array([1.0]), noise_floor_strategy="shared"
+    )
+    auto_result = estimate_directional_derivative(
+        f, point, np.array([1.0]), noise_floor_strategy="auto"
+    )
+    assert auto_result.value == shared_result.value
+    assert auto_result.error_estimate == shared_result.error_estimate
+    assert auto_result.status == shared_result.status == "converged"
+
+
+def test_invalid_noise_floor_strategy_raises():
+    def f(x):
+        return np.array([x[0]])
+
+    with pytest.raises(ValueError, match="noise_floor_strategy"):
+        estimate_directional_derivative(
+            f, np.array([1.0]), np.array([1.0]), noise_floor_strategy="bogus"
+        )
+
+
+def test_point_violating_bounds_raises():
+    def f(x):
+        return np.array([x[0]])
+
+    with pytest.raises(ValueError, match="bounds"):
+        estimate_directional_derivative(
+            f,
+            np.array([1.0]),
+            np.array([1.0]),
+            bounds=(np.array([0.0]), np.array([0.5])),
+        )
+
+
+def test_point_within_bounds_is_not_rejected():
+    def f(x):
+        return np.array([x[0] ** 2])
+
+    result = estimate_directional_derivative(
+        f,
+        np.array([0.5]),
+        np.array([1.0]),
+        bounds=(np.array([0.0]), np.array([1.0])),
+    )
+    assert result.status == "converged"
+    assert abs(result.value - 1.0) < 1e-6

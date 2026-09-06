@@ -2,9 +2,11 @@ import numpy as np
 from helpers import deterministic_noise
 
 from fiddy.noise import (
+    NoiseFloor,
     default_probe_direction,
     estimate_model_noise_floor,
     estimate_noise_floor,
+    noise_floor_is_confident,
 )
 
 
@@ -100,3 +102,58 @@ def test_estimate_model_noise_floor_uses_one_shared_probe():
     assert isinstance(result.sigma, float)
     # One probing batch only (n_points default), not one per dimension.
     assert call_count == 15
+
+
+def test_bounds_can_crush_the_probe_step_to_zero():
+    """A point sitting exactly at its own declared bound gives the probe
+    zero room to perturb it -- `clamp_step_to_bounds` clamps the whole
+    step to `0`, so every probe point evaluates identically and the
+    plateau-detection heuristic reports a degenerate `sigma=0.0`. This is
+    the mechanism `noise_floor_is_confident` exists to flag (see
+    `fiddy.estimate`'s `noise_floor_strategy="auto"` escalation, added
+    after this was found to silently corrupt otherwise-unrelated
+    directions' noise floors on real bounded models)."""
+    point = np.array([1.0])
+    direction = np.array([1.0])
+    bounds = (np.array([0.0]), np.array([1.0]))  # point already at upper bound
+
+    result = estimate_noise_floor(
+        lambda x: np.array([x[0] ** 2]), point, direction, bounds=bounds
+    )
+
+    assert result.sigma == 0.0
+    assert result.confident is False
+    assert not noise_floor_is_confident(result)
+
+
+def test_noise_floor_is_confident_true_case():
+    assert noise_floor_is_confident(
+        NoiseFloor(sigma=1e-9, level=5, confident=True, sigmas=[])
+    )
+
+
+def test_noise_floor_is_confident_false_for_zero_sigma():
+    # A degenerate NoiseFloor can report confident=True with sigma=0.0
+    # (every probe point evaluating identically looks like a perfect,
+    # confident plateau to the plateau-detection heuristic) -- this must
+    # still be treated as unusable.
+    assert not noise_floor_is_confident(
+        NoiseFloor(sigma=0.0, level=1, confident=True, sigmas=[])
+    )
+
+
+def test_noise_floor_is_confident_false_for_unconfident():
+    assert not noise_floor_is_confident(
+        NoiseFloor(sigma=1e-3, level=None, confident=False, sigmas=[])
+    )
+
+
+def test_noise_floor_is_confident_multi_output_requires_all_confident():
+    assert not noise_floor_is_confident(
+        NoiseFloor(
+            sigma=np.array([1e-9, 1e-9]),
+            level=np.array([5, -1]),
+            confident=np.array([True, False]),
+            sigmas=[],
+        )
+    )

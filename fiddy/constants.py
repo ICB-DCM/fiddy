@@ -29,3 +29,8 @@ class Type:
     SEED_LIKE = int | np.integer | Sequence[int] | np.random.SeedSequence
     #: An already-constructed random generator, per SPEC 7.
     RNG_LIKE = np.random.Generator | np.random.BitGenerator
+    #: A per-parameter valid domain, ``(lower, upper)``, each the same
+    #: shape as `POINT` -- following scipy's `optimize.approx_derivative`
+    #: convention: ``-inf``/``inf`` marks an unbounded component. See
+    #: :func:`fiddy.step_size.clamp_step_to_bounds`.
+    BOUNDS = tuple[ARRAY, ARRAY]
