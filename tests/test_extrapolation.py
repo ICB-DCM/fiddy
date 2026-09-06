@@ -5,6 +5,7 @@ import pytest
 from helpers import deterministic_noise
 
 from fiddy.extrapolation import (
+    _best_diagonal_estimate,
     extrapolate_central_differences,
     neville_extrapolate,
 )
@@ -106,3 +107,119 @@ def test_chain_disagreement_flags_noise_dominated_case():
     # corroboration is doing real work, not a no-op.
     assert result.disagreement > 0
     assert result.error_estimate >= result.disagreement
+
+
+def test_early_stopping_avoids_a_coincidentally_agreeing_deep_entry_case_a():
+    """Real ladder/central_values captured from a directional derivative
+    whose true value is 0 (AMICI SBML semantic test suite case 00193).
+    The old global-argmin selection picked the deepest (most noise-
+    contaminated) table entry (true error ~5.9e-8) purely because it
+    happened to numerically coincide with its neighbor, when a much
+    shallower entry (true error ~1.5e-11, ~3.8 million times more
+    accurate) was sitting earlier in the very same table. Ridders'-style
+    early stopping must pick the shallow, accurate entry instead."""
+    ladder = np.array(
+        [
+            3.570203215001967e-05,
+            1.7851016075009836e-05,
+            8.925508037504918e-06,
+            4.462754018752459e-06,
+            2.2313770093762294e-06,
+            1.1156885046881147e-06,
+            5.578442523440574e-07,
+            2.789221261720287e-07,
+        ]
+    )
+    central_values = np.array(
+        [
+            -4.975506245515696e-11,
+            5.099893901653589e-10,
+            1.4926518736547087e-10,
+            1.3533376987802693e-08,
+            -6.5676682440807185e-09,
+            -3.045009822255606e-08,
+            3.1047158972017943e-08,
+            5.174526495336324e-08,
+        ]
+    )
+    result = extrapolate_central_differences(ladder, central_values)
+    assert abs(result.value) < 1e-9
+    assert result.best_index < 6
+
+
+def test_early_stopping_avoids_a_coincidentally_agreeing_deep_entry_case_b():
+    """Same failure mode as case A above, on a different real direction
+    whose true value is an ordinary-magnitude 0.855252628629093 (AMICI
+    SBML semantic test suite case 00831) -- confirms the bug isn't
+    specific to near-zero true values. The old selection picked the
+    deepest entry (true error ~4.9e-8) over a shallower one (true error
+    ~7e-10, ~70x more accurate)."""
+    ladder = np.array(
+        [
+            2.7118905466986e-05,
+            1.3559452733493e-05,
+            6.7797263667465e-06,
+            3.38986318337325e-06,
+            1.694931591686625e-06,
+            8.474657958433125e-07,
+            4.2373289792165626e-07,
+            2.1186644896082813e-07,
+        ]
+    )
+    central_values = np.array(
+        [
+            0.8552526293278522,
+            0.8552526279338765,
+            0.8552526258459835,
+            0.8552526297925107,
+            0.8552526251745826,
+            0.8552526412227017,
+            0.8552525991700793,
+            0.8552525847595234,
+        ]
+    )
+    expectation = 0.855252628629093
+    result = extrapolate_central_differences(ladder, central_values)
+    assert abs(result.value - expectation) < 1e-8
+    assert result.best_index < 6
+
+
+def test_early_stopping_does_not_truncate_a_genuinely_converging_diagonal():
+    """A synthetic diagonal that keeps improving all the way to the
+    deepest order (no noise-driven false agreement anywhere) must still
+    pick that deepest, most accurate entry -- early stopping should never
+    engage for a well-behaved sequence."""
+    # Errors shrink by 10x each order: 1e-1, 1e-2, ..., down to the last.
+    true_value = 3.0
+    diagonal = true_value + np.array(
+        [1e-1, 1e-2, 1e-3, 1e-4, 1e-5, 1e-6, 1e-7, 1e-8]
+    )
+    value, error, best_index = _best_diagonal_estimate(diagonal.reshape(-1, 1))
+    assert best_index[0] == 7
+    assert abs(value[0] - true_value) < 1e-7
+
+
+def test_best_diagonal_estimate_early_stopping_boundary():
+    """Pin the exact `safe` semantics: an error just under `safe *
+    best_error` does not itself become the new best, but does *not* stop
+    the scan -- a later, genuinely smaller error can still be found and
+    used. An error just over that threshold stops the scan outright,
+    discarding even a later, coincidentally tiny error."""
+    # errors (successive diagonal diffs): [1.0, 1.9, 0.05]. errors[1]=1.9
+    # is below safe(2.0)*best_error(1.0)=2.0, so scanning continues past
+    # it (without it becoming best) and reaches the genuinely smaller
+    # errors[2]=0.05 at index 3.
+    diagonal_continues = np.array([0.0, 1.0, 2.9, 2.95]).reshape(-1, 1)
+    value, error, best_index = _best_diagonal_estimate(
+        diagonal_continues, safe=2.0
+    )
+    assert best_index[0] == 3
+
+    # errors: [1.0, 2.1, 0.05]. errors[1]=2.1 >= safe(2.0)*1.0=2.0, so the
+    # scan stops there -- the later errors[2]=0.05, though numerically
+    # smaller than everything seen, is never considered; frozen at index 1.
+    diagonal_stops = np.array([0.0, 1.0, 3.1, 3.15]).reshape(-1, 1)
+    value, error, best_index = _best_diagonal_estimate(
+        diagonal_stops, safe=2.0
+    )
+    assert best_index[0] == 1
