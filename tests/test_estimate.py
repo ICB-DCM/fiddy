@@ -27,6 +27,51 @@ def test_smooth_function_converges_accurately():
     assert abs(result.value - true_derivative) < 1e-6
 
 
+def test_far_ladder_catches_a_kink_the_main_ladder_never_crosses():
+    """Reproduces the mechanism behind a confirmed real bug ("ladder too
+    coarse near events"): a parameter-space kink (continuous value,
+    discontinuous derivative -- the same character as a real AMICI/SBML
+    event-triggered discontinuity) sitting closer to the evaluation point
+    than every main-ladder rung ever reaches. Every main rung straddles
+    the kink and reports a self-consistent but wrong "average of both
+    slopes" value; only the far ladder (anchored near machine epsilon,
+    far below the kink's distance from the evaluation point) ever
+    resolves the correct, single-branch derivative.
+
+    Confirmed via 13 distinct real AMICI/SBML models (case 00026's
+    reproducer: a step-size ladder from 54% to 0.4% relative reported a
+    "converged" value 5.2x off the true one, whose crossing perturbation
+    was ~0.1% relative -- below every main rung)."""
+    c = 1.0
+    slope_before, slope_after = 2.0, 5.0
+    offset = 1e-5
+    x0 = c - offset
+
+    def f(x):
+        xv = x[0]
+        if xv < c:
+            return np.array([slope_before * xv])
+        const = c * (slope_before - slope_after)
+        return np.array([slope_after * xv + const])
+
+    result = estimate_directional_derivative(
+        f, np.array([x0]), np.array([1.0]), noise_floor=1e-6
+    )
+
+    # The main ladder alone is confidently wrong -- self-consistently
+    # converging to roughly the average of both branches' slopes, not
+    # either one.
+    assert abs(result.value - (slope_before + slope_after) / 2) < 1e-2
+    # The far ladder, entirely below the kink's distance from `x0`,
+    # resolves the correct (before-branch) derivative.
+    assert result.far_extrapolation is not None
+    assert abs(result.far_extrapolation.value - slope_before) < 1e-6
+    # The disagreement between the two is flagged, not silently reported
+    # as a confident, wrong "converged" result.
+    assert result.cross_regime.suspected
+    assert result.status == "discontinuity_suspected"
+
+
 def test_noisy_function_converges_within_tolerance():
     noise_amplitude = 1e-8
 
@@ -174,13 +219,15 @@ def test_estimate_gradient_shares_base_point_evaluation():
     point = np.array([0.3, 0.5, -0.2])
     directions = list(np.eye(3))
     n_rungs = 8
+    n_rungs_far = 4
 
     estimate_gradient(f, point, directions=directions, n_rungs=n_rungs)
 
     # One shared noise-floor probe (15 points) + one shared f(x0) + each
-    # direction's own 2*n_rungs perturbed evaluations -- not a separate
-    # f(x0) or noise probe per direction.
-    expected = 15 + 1 + len(directions) * 2 * n_rungs
+    # direction's own 2*n_rungs main-ladder plus 2*n_rungs_far far-ladder
+    # perturbed evaluations -- not a separate f(x0) or noise probe per
+    # direction.
+    expected = 15 + 1 + len(directions) * 2 * (n_rungs + n_rungs_far)
     assert call_count == expected
 
 
@@ -266,13 +313,15 @@ def test_estimate_jacobian_shares_one_batch_regardless_of_output_count():
 
     point = np.array([0.3, 0.5, -0.2])
     n_rungs = 8
+    n_rungs_far = 4
 
     estimate_jacobian(f, point, n_rungs=n_rungs)
 
     # One shared noise-floor probe (15 points) + one direct f(x0) call
-    # (also populates `.schema`) + each direction's own 2*n_rungs
-    # perturbed evaluations -- independent of how many outputs "f" bundles.
-    expected = 15 + 1 + len(point) * 2 * n_rungs
+    # (also populates `.schema`) + each direction's own 2*n_rungs main-
+    # ladder plus 2*n_rungs_far far-ladder perturbed evaluations --
+    # independent of how many outputs "f" bundles.
+    expected = 15 + 1 + len(point) * 2 * (n_rungs + n_rungs_far)
     assert call_count == expected
 
 

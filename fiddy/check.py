@@ -201,6 +201,8 @@ def check_gradient(
     nondet_tol: float = 0.0,
     n_rungs: int = 8,
     step_ratio: float = 2.0,
+    n_rungs_far: int = 4,
+    step_ratio_far: float = 10.0,
     bounds: Type.BOUNDS | None = None,
     noise_floor_strategy: str = "auto",
     executor: Executor | None = None,
@@ -275,6 +277,13 @@ def check_gradient(
     :param nondet_tol: See :func:`fiddy.estimate.estimate_gradient`.
     :param n_rungs: See :func:`fiddy.estimate.estimate_gradient`.
     :param step_ratio: See :func:`fiddy.estimate.estimate_gradient`.
+    :param n_rungs_far: See :func:`fiddy.estimate.estimate_gradient` --
+        an independently-anchored, much-smaller-scale "far" ladder,
+        always evaluated alongside the main one to catch a hidden
+        parameter-space discontinuity closer to the evaluation point than
+        the main ladder's own finest rung (see
+        :mod:`fiddy.discontinuity`'s module docstring).
+    :param step_ratio_far: See :func:`fiddy.estimate.estimate_gradient`.
     :param bounds: Optional per-parameter valid domain -- e.g. a model's
         declared parameter bounds -- that no probe or step is ever
         allowed to step outside of; see
@@ -331,6 +340,8 @@ def check_gradient(
         nondet_tol=nondet_tol,
         n_rungs=n_rungs,
         step_ratio=step_ratio,
+        n_rungs_far=n_rungs_far,
+        step_ratio_far=step_ratio_far,
         bounds=bounds,
         noise_floor_strategy=noise_floor_strategy,
         executor=executor,
@@ -495,6 +506,8 @@ def check_jacobian(
     nondet_tol: float = 0.0,
     n_rungs: int = 8,
     step_ratio: float = 2.0,
+    n_rungs_far: int = 4,
+    step_ratio_far: float = 10.0,
     bounds: Type.BOUNDS | None = None,
     noise_floor_strategy: str = "auto",
     executor: Executor | None = None,
@@ -532,6 +545,10 @@ def check_jacobian(
     :param n_rungs: Forwarded to :func:`fiddy.estimate.estimate_jacobian`.
     :param step_ratio: Forwarded to
         :func:`fiddy.estimate.estimate_jacobian`.
+    :param n_rungs_far: See :func:`check_gradient`. Forwarded to
+        :func:`fiddy.estimate.estimate_jacobian`.
+    :param step_ratio_far: Forwarded to
+        :func:`fiddy.estimate.estimate_jacobian`.
     :param bounds: See :func:`check_gradient`. Forwarded to
         :func:`fiddy.estimate.estimate_jacobian`.
     :param noise_floor_strategy: See :func:`check_gradient`. Forwarded to
@@ -552,6 +569,8 @@ def check_jacobian(
         nondet_tol=nondet_tol,
         n_rungs=n_rungs,
         step_ratio=step_ratio,
+        n_rungs_far=n_rungs_far,
+        step_ratio_far=step_ratio_far,
         bounds=bounds,
         noise_floor_strategy=noise_floor_strategy,
         executor=executor,
