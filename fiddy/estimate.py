@@ -396,8 +396,16 @@ def _estimate_from_ladder(
         np.atleast_1d(discontinuity_noise_sigma), (n_outputs,)
     ).astype(float)
 
-    central_values = (f_plus - f_minus) / (2 * ladder[:, None])
-    gap_values = (f_plus - 2 * f_0[None, :] + f_minus) / ladder[:, None]
+    with np.errstate(divide="ignore", invalid="ignore"):
+        # `ladder` can legitimately collapse to an all-zero step (e.g.
+        # `clamp_step_to_bounds` finds zero room to move at all because
+        # `point` sits exactly on its declared bound in this direction --
+        # see that function's own docstring). The resulting NaN/inf is
+        # the correct, honest outcome: `converged_arr`/`suspected_arr`
+        # below classify it as "noise_dominated" (comparisons against NaN
+        # are always False), not a bug to work around.
+        central_values = (f_plus - f_minus) / (2 * ladder[:, None])
+        gap_values = (f_plus - 2 * f_0[None, :] + f_minus) / ladder[:, None]
 
     extrapolation = extrapolate_central_differences(ladder, central_values)
 

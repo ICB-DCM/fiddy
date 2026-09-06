@@ -53,11 +53,18 @@ def neville_extrapolate(xs: np.ndarray, ys: np.ndarray) -> np.ndarray:
     n = len(xs)
     q = np.zeros((n, n, *np.shape(ys)[1:]))
     q[:, 0] = ys
-    for j in range(1, n):
-        for i in range(j, n):
-            q[i, j] = (-xs[i - j] * q[i, j - 1] + xs[i] * q[i - 1, j - 1]) / (
-                xs[i] - xs[i - j]
-            )
+    with np.errstate(divide="ignore", invalid="ignore"):
+        # `xs[i] - xs[i - j]` can be exactly 0 when the underlying ladder
+        # collapsed to an all-zero step (a bounds-clamped direction with
+        # zero room to step at all -- see
+        # `fiddy.step_size.clamp_step_to_bounds`'s docstring). The
+        # resulting NaN correctly propagates to an unresolved
+        # ("noise_dominated") direction downstream, not a bug.
+        for j in range(1, n):
+            for i in range(j, n):
+                q[i, j] = (
+                    -xs[i - j] * q[i, j - 1] + xs[i] * q[i - 1, j - 1]
+                ) / (xs[i] - xs[i - j])
     return np.array([q[j, j] for j in range(n)])
 
 
