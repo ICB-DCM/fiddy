@@ -192,6 +192,8 @@ def check_gradient(
     nondet_tol: float = 0.0,
     n_rungs: int = 8,
     step_ratio: float = 2.0,
+    bounds: Type.BOUNDS | None = None,
+    noise_floor_strategy: str = "auto",
     executor: Executor | None = None,
 ) -> GradientCheckResult:
     """Check a supplied gradient against a finite-difference estimate.
@@ -245,12 +247,25 @@ def check_gradient(
     :param nondet_tol: See :func:`fiddy.estimate.estimate_gradient`.
     :param n_rungs: See :func:`fiddy.estimate.estimate_gradient`.
     :param step_ratio: See :func:`fiddy.estimate.estimate_gradient`.
+    :param bounds: Optional per-parameter valid domain -- e.g. a model's
+        declared parameter bounds -- that no probe or step is ever
+        allowed to step outside of; see
+        :func:`fiddy.step_size.clamp_step_to_bounds`. `None` (the
+        default) disables clamping entirely. `point` itself must already
+        satisfy `bounds`. Forwarded to :func:`fiddy.estimate.estimate_gradient`.
+    :param noise_floor_strategy: See :func:`fiddy.estimate.estimate_gradient`
+        -- `"auto"` (the default) transparently falls back to an
+        independent noise-floor probe per direction whenever the cheap
+        shared probe comes back unconfident (as it reliably does once a
+        parameter sits close to its own `bounds`), so supplying `bounds`
+        does not on its own require choosing a strategy here.
     :param executor: See :func:`fiddy.estimate.estimate_gradient`.
     :return: The gradient check result.
     :raises ValueError: If both `directions` and `random_directions` are
         given, if `random_directions` is used with an `expected` that
-        isn't the full gradient vector, or if `expected` doesn't have one
-        entry per direction.
+        isn't the full gradient vector, if `expected` doesn't have one
+        entry per direction, if `point` violates `bounds`, or if
+        `noise_floor_strategy` is invalid.
     :raises fiddy.function.FunctionEvaluationError: If `function` raises
         an exception, or returns a non-finite (``NaN``/``inf``) value, at
         any point evaluated during the check (e.g. an ODE solver failing
@@ -288,6 +303,8 @@ def check_gradient(
         nondet_tol=nondet_tol,
         n_rungs=n_rungs,
         step_ratio=step_ratio,
+        bounds=bounds,
+        noise_floor_strategy=noise_floor_strategy,
         executor=executor,
     )
     expected = np.atleast_1d(np.asarray(expected, dtype=float))
@@ -449,6 +466,8 @@ def check_jacobian(
     nondet_tol: float = 0.0,
     n_rungs: int = 8,
     step_ratio: float = 2.0,
+    bounds: Type.BOUNDS | None = None,
+    noise_floor_strategy: str = "auto",
     executor: Executor | None = None,
 ) -> JacobianCheckResult:
     """Check every output component of a bundled multi-output function at
@@ -482,9 +501,15 @@ def check_jacobian(
     :param n_rungs: Forwarded to :func:`fiddy.estimate.estimate_jacobian`.
     :param step_ratio: Forwarded to
         :func:`fiddy.estimate.estimate_jacobian`.
+    :param bounds: See :func:`check_gradient`. Forwarded to
+        :func:`fiddy.estimate.estimate_jacobian`.
+    :param noise_floor_strategy: See :func:`check_gradient`. Forwarded to
+        :func:`fiddy.estimate.estimate_jacobian`.
     :param executor: Forwarded to
         :func:`fiddy.estimate.estimate_jacobian`.
     :return: The Jacobian check result.
+    :raises ValueError: If `point` violates `bounds`, or
+        `noise_floor_strategy` is invalid.
     :raises fiddy.function.FunctionEvaluationError: See
         :func:`check_gradient`.
     """
@@ -496,6 +521,8 @@ def check_jacobian(
         nondet_tol=nondet_tol,
         n_rungs=n_rungs,
         step_ratio=step_ratio,
+        bounds=bounds,
+        noise_floor_strategy=noise_floor_strategy,
         executor=executor,
     )
     expected_flat = _flatten_expected_jacobian(

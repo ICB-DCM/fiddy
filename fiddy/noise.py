@@ -28,12 +28,14 @@ import numpy as np
 
 from .constants import Type
 from .executor import Executor, SequentialExecutor
+from .step_size import clamp_step_to_bounds
 
 __all__ = [
     "NoiseFloor",
     "default_probe_direction",
     "estimate_noise_floor",
     "estimate_model_noise_floor",
+    "noise_floor_is_confident",
 ]
 
 
@@ -65,69 +67,59 @@ class NoiseFloor:
     an ``(n_outputs,)`` array for multi-output."""
 
 
-def estimate_noise_floor(
-    function: Type.FUNCTION,
+def _noise_floor_probe_points(
     point: Type.POINT,
     direction: Type.DIRECTION,
-    h0: float | None = None,
-    n_points: int = 15,
-    plateau_ratio: float = 3.0,
-    executor: Executor | None = None,
-) -> NoiseFloor:
-    """Estimate a function's per-evaluation noise level along a direction.
+    h0: float | None,
+    n_points: int,
+    bounds: Type.BOUNDS | None,
+) -> list[np.ndarray]:
+    """Build one direction's probe points for :func:`estimate_noise_floor`,
+    bounds-clamped -- factored out so callers needing *several* directions'
+    worth of probe points (e.g. per-direction noise-floor estimation in
+    :mod:`fiddy.estimate`) can concatenate them into one combined batch
+    and dispatch it through a single `executor` call, per fiddy's
+    batch-then-analyze design, rather than one `executor` round per
+    direction.
 
-    Evaluates ``n_points`` equally spaced points centered on ``point`` and
-    builds the finite-difference table. For i.i.d. per-evaluation noise with
-    standard deviation ``sigma``, the ``k``-th order forward difference has
-    standard deviation ``sqrt(C(2k, k)) * sigma``, so ``sigma_level(k) =
-    sqrt(mean(row_k**2) / C(2k, k))`` is an unbiased noise estimate *once
-    the smooth part of the function has been differenced away*. Below that
-    order, the smooth (Taylor) part of the function dominates the row and
-    ``sigma_level(k)`` keeps shrinking rapidly (by roughly a factor of
-    ``h`` per order); once noise dominates, differencing further barely
-    changes ``sigma_level(k)`` any more (it plateaus). This looks for the
-    lowest order at which that rapid shrinkage stops -- i.e. the first
-    ``k`` with ``sigma_level(k) / sigma_level(k+1) < plateau_ratio`` -- and
-    reports the plateau value as the noise floor.
-
-    :param function: The blackbox function.
     :param point: The point to probe around.
     :param direction: The direction to probe along.
-    :param h0: The spacing between probe points. Defaults to 1% of the
-        point's magnitude along ``direction`` (falling back to an
+    :param h0: The spacing between probe points, or `None` to default to
+        1% of the point's magnitude along `direction` (falling back to an
         absolute step of ``0.01`` near the origin).
-    :param n_points: Number of equally spaced probe points. More points
-        give more headroom for the plateau to appear within resolvable
-        orders, at the cost of more function evaluations.
-    :param plateau_ratio: How close two consecutive orders' estimates
-        must be (``sigma_level(k) / sigma_level(k+1) < plateau_ratio``)
-        to be treated as "the shrinkage has stopped."
-    :param executor: How to dispatch the ``n_points`` probe evaluations
-        -- e.g. :class:`fiddy.executor.JoblibExecutor` to run them in
-        parallel. Defaults to :class:`fiddy.executor.SequentialExecutor`.
-        All ``n_points`` probe points are decided upfront and dispatched
-        as a single batch, so switching executors changes wall-clock time
-        only, never the result.
-    :return: The estimated noise floor.
+    :param n_points: Number of equally spaced probe points.
+    :param bounds: Optional per-parameter valid domain; see
+        :func:`fiddy.step_size.clamp_step_to_bounds`.
+    :return: The `n_points` probe points, in order.
     """
-    if executor is None:
-        executor = SequentialExecutor()
-    point = np.asarray(point, dtype=float)
-    direction = np.asarray(direction, dtype=float)
     if h0 is None:
         h0 = max(abs(float(np.dot(point, direction))), 1.0) * 1e-2
 
-    offsets = (np.arange(n_points) - (n_points - 1) / 2) * h0
-    probe_points = [point + t * direction for t in offsets]
-    values = np.array(
-        [np.asarray(v) for v in executor(function, probe_points)]
+    max_offset = (n_points - 1) / 2 * h0
+    clamped_max_offset = clamp_step_to_bounds(
+        point, direction, max_offset, bounds
     )
-    # Keep every output component: a multi-output (fiddy.output-flattened)
-    # function's noise floor is estimated component-wise, from the very
-    # same probe batch -- no extra evaluations needed to cover every
-    # bundled output at once.
-    values = values.reshape(n_points, -1).astype(float)
-    n_outputs = values.shape[1]
+    if max_offset > 0:
+        h0 = h0 * (clamped_max_offset / max_offset)
+
+    offsets = (np.arange(n_points) - (n_points - 1) / 2) * h0
+    return [point + t * direction for t in offsets]
+
+
+def _analyze_noise_table(
+    values: np.ndarray, plateau_ratio: float
+) -> NoiseFloor:
+    """Turn one direction's probe evaluations into a :class:`NoiseFloor`,
+    via the plateau-detection criterion described in
+    :func:`estimate_noise_floor`'s own docstring -- factored out so the
+    same analysis can run on results gathered from a combined,
+    multi-direction batch dispatch (see :func:`_noise_floor_probe_points`).
+
+    :param values: The probe evaluations, shape ``(n_points, n_outputs)``.
+    :param plateau_ratio: See :func:`estimate_noise_floor`.
+    :return: The estimated noise floor.
+    """
+    n_points, n_outputs = values.shape
 
     table = [values]
     for _ in range(n_points - 1):
@@ -196,6 +188,101 @@ def estimate_noise_floor(
     )
 
 
+def estimate_noise_floor(
+    function: Type.FUNCTION,
+    point: Type.POINT,
+    direction: Type.DIRECTION,
+    h0: float | None = None,
+    n_points: int = 15,
+    plateau_ratio: float = 3.0,
+    executor: Executor | None = None,
+    bounds: Type.BOUNDS | None = None,
+) -> NoiseFloor:
+    """Estimate a function's per-evaluation noise level along a direction.
+
+    Evaluates ``n_points`` equally spaced points centered on ``point`` and
+    builds the finite-difference table. For i.i.d. per-evaluation noise with
+    standard deviation ``sigma``, the ``k``-th order forward difference has
+    standard deviation ``sqrt(C(2k, k)) * sigma``, so ``sigma_level(k) =
+    sqrt(mean(row_k**2) / C(2k, k))`` is an unbiased noise estimate *once
+    the smooth part of the function has been differenced away*. Below that
+    order, the smooth (Taylor) part of the function dominates the row and
+    ``sigma_level(k)`` keeps shrinking rapidly (by roughly a factor of
+    ``h`` per order); once noise dominates, differencing further barely
+    changes ``sigma_level(k)`` any more (it plateaus). This looks for the
+    lowest order at which that rapid shrinkage stops -- i.e. the first
+    ``k`` with ``sigma_level(k) / sigma_level(k+1) < plateau_ratio`` -- and
+    reports the plateau value as the noise floor.
+
+    :param function: The blackbox function.
+    :param point: The point to probe around.
+    :param direction: The direction to probe along.
+    :param h0: The spacing between probe points. Defaults to 1% of the
+        point's magnitude along ``direction`` (falling back to an
+        absolute step of ``0.01`` near the origin).
+    :param n_points: Number of equally spaced probe points. More points
+        give more headroom for the plateau to appear within resolvable
+        orders, at the cost of more function evaluations.
+    :param plateau_ratio: How close two consecutive orders' estimates
+        must be (``sigma_level(k) / sigma_level(k+1) < plateau_ratio``)
+        to be treated as "the shrinkage has stopped."
+    :param executor: How to dispatch the ``n_points`` probe evaluations
+        -- e.g. :class:`fiddy.executor.JoblibExecutor` to run them in
+        parallel. Defaults to :class:`fiddy.executor.SequentialExecutor`.
+        All ``n_points`` probe points are decided upfront and dispatched
+        as a single batch, so switching executors changes wall-clock time
+        only, never the result.
+    :param bounds: Optional per-parameter valid domain; forwarded to
+        :func:`fiddy.step_size.clamp_step_to_bounds`, applied to the
+        probe's outermost point -- every interior probe point is then
+        automatically safe too, since it sits strictly closer to `point`.
+        `None` (the default) disables clamping entirely.
+    :return: The estimated noise floor.
+    """
+    if executor is None:
+        executor = SequentialExecutor()
+    point = np.asarray(point, dtype=float)
+    direction = np.asarray(direction, dtype=float)
+    probe_points = _noise_floor_probe_points(
+        point, direction, h0, n_points, bounds
+    )
+    values = np.array(
+        [np.asarray(v) for v in executor(function, probe_points)]
+    )
+    # Keep every output component: a multi-output (fiddy.output-flattened)
+    # function's noise floor is estimated component-wise, from the very
+    # same probe batch -- no extra evaluations needed to cover every
+    # bundled output at once.
+    values = values.reshape(n_points, -1).astype(float)
+    return _analyze_noise_table(values, plateau_ratio)
+
+
+def noise_floor_is_confident(noise: NoiseFloor) -> bool:
+    """Whether a (possibly multi-output) :class:`NoiseFloor` is usable
+    as-is, or whether it looks like a *degenerate* estimate that should
+    not be trusted -- used to drive the `"auto"` noise-floor-strategy
+    escalation in :mod:`fiddy.estimate` (see
+    :func:`fiddy.estimate.estimate_gradient`'s `noise_floor_strategy`).
+
+    Checks both `noise.confident` (the plateau-detection heuristic's own
+    signal) and `noise.sigma` being nonzero: a bounds-clamped probe step
+    crushed down to (numerically) zero can make every probe point
+    evaluate to the same value, which the plateau-detection heuristic
+    can misread as a confident zero-noise plateau rather than "the probe
+    itself was too small to measure anything" -- found via a real,
+    bounds-constrained PEtab model (see
+    :func:`fiddy.noise.default_probe_direction`'s own docstring for the
+    underlying shared-probe cross-contamination this guards against).
+
+    :param noise: The noise floor to check.
+    :return: `True` iff every output component is confident and has a
+        strictly positive `sigma`.
+    """
+    confident = bool(np.all(noise.confident))
+    nonzero = bool(np.all(np.atleast_1d(noise.sigma) > 0))
+    return confident and nonzero
+
+
 def default_probe_direction(point: Type.POINT) -> np.ndarray:
     """A generic direction for a single, shared, per-point noise estimate.
 
@@ -227,9 +314,12 @@ def default_probe_direction(point: Type.POINT) -> np.ndarray:
     real curvature to fool the plateau-detection heuristic into reading
     it as noise). Root-caused: both failure modes are really about a
     finite-difference step leaving a parameter's *known, bounded* valid
-    domain -- the actual fix under consideration is bounds-aware step
-    clamping (accepting an optional per-parameter valid range and never
-    stepping outside it), not a cleverer probe direction.
+    domain -- the actual fix is bounds-aware step clamping (an optional
+    per-parameter valid range, never stepped outside of -- see the
+    `bounds` parameter of :func:`estimate_noise_floor`,
+    :func:`fiddy.step_size.build_step_ladder`, and the public
+    `fiddy.check_gradient`/`fiddy.check_jacobian` entry points), not a
+    cleverer probe direction.
 
     :param point: The point a probe direction is needed for (only its
         dimensionality is used).
@@ -254,7 +344,7 @@ def estimate_model_noise_floor(
     :param function: The blackbox function.
     :param point: The point to probe around.
     :param kwargs: Forwarded to :func:`estimate_noise_floor` (``h0``,
-        ``n_points``, ``plateau_ratio``, ``executor``).
+        ``n_points``, ``plateau_ratio``, ``executor``, ``bounds``).
     :return: The estimated noise floor.
     """
     direction = default_probe_direction(point)

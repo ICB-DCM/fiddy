@@ -4,6 +4,7 @@ import numpy as np
 import pytest
 
 from fiddy.check import check_gradient, check_jacobian
+from fiddy.function import FunctionEvaluationError
 
 
 def test_correct_gradient_passes():
@@ -238,3 +239,25 @@ def test_check_jacobian_wrong_shape_expected_raises():
 
     with pytest.raises(ValueError, match="shape"):
         check_jacobian(f, point, wrong_shape_expected)
+
+
+def test_bounds_prevent_a_domain_violation_that_would_otherwise_fail():
+    """Regression test: a finite-difference step evaluated outside a
+    function's known valid domain is not a hypothetical concern -- e.g.
+    `sqrt` is undefined for negative input. Close to the domain's edge,
+    an unbounded probe/step can (and here does) push the evaluated point
+    negative; supplying `bounds` must keep every evaluation inside it."""
+
+    def f(x):
+        return np.array([np.sqrt(x[0])])
+
+    point = np.array([0.01])
+    expected = [1 / (2 * math.sqrt(point[0]))]
+
+    with pytest.raises(FunctionEvaluationError):
+        check_gradient(f, point, expected)
+
+    result = check_gradient(
+        f, point, expected, bounds=(np.array([0.0]), np.array([np.inf]))
+    )
+    assert result.success
