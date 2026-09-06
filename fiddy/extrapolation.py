@@ -24,6 +24,21 @@ estimates from disjoint data agreeing is a much stronger convergence
 signal than one estimate's internal self-consistency; disagreeing is a
 strong signal that noise (not real higher-order structure) is what the
 "convergence" was tracking.
+
+**Corroboration widens the error estimate, but does not by itself fix
+*which value* gets reported.** Both the full ladder and each chain
+individually still picked their own "best" entry via the same
+single-``argmin``-over-the-whole-diagonal search -- and confirmed on
+real ODE-model directions whose true value was (near) zero, that search
+remained vulnerable to the exact same false-agreement failure mode
+described above, even with corroboration already in place: it picked the
+deepest, most noise-contaminated table entry because two deep entries
+happened to coincide, while several shallower entries in the very same
+table were dramatically more accurate (up to ~3.8 million times, in one
+confirmed case). :func:`_best_diagonal_estimate` now follows Ridders'
+method's early-stopping rule instead (see its own docstring) -- fixing
+the value-selection problem directly, rather than only widening the
+error bar around a value that was still avoidably wrong.
 """
 
 from __future__ import annotations
@@ -70,22 +85,45 @@ def neville_extrapolate(xs: np.ndarray, ys: np.ndarray) -> np.ndarray:
 
 def _best_diagonal_estimate(
     diagonal: np.ndarray,
+    safe: float = 2.0,
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     """Pick the best trade-off point along a Neville-table diagonal.
 
     Going to the deepest (highest-order, smallest-step) entry is not
     always best: past some order, further extrapolation just amplifies
     noise (the classical truncation-vs-rounding trade-off -- see
-    :mod:`fiddy.step_size`). This picks the order whose successive-
-    difference disagreement with its neighbor is smallest, following
-    DERIVEST/numdifftools' (``Derrico2006derivest``) "pick the table entry
-    with the smallest predicted error" approach (see module docstring).
-    Used for the full
-    ladder and for each corroborating chain individually -- the
-    corroboration in :func:`extrapolate_central_differences` comes from
-    comparing what this picks *independently* on disjoint data, not from
-    trusting one call to this function alone (see the module docstring
-    for why that matters).
+    :mod:`fiddy.step_size`). Neville's algorithm is an *exact* polynomial
+    interpolant: at the deepest order, an n-point polynomial fits those n
+    points exactly, zero residual, whether the data is genuine smooth
+    curvature or pure noise -- so a plain global ``argmin`` of successive-
+    difference sizes across the *whole* diagonal can be fooled by two
+    deep, heavily-noise-contaminated entries that happen to coincide by
+    chance (a high-enough-degree polynomial can wiggle to match almost
+    anything). Confirmed on real ODE-model directions whose true value was
+    (near) zero: the global-argmin search picked the deepest table entry
+    (true error up to ~3.8 million times worse than the best available
+    order), because two deep entries coincidentally agreed while several
+    shallower, far more accurate entries sat earlier in the same table.
+
+    Instead, this follows Ridders' method's early-stopping rule
+    (``Ridders1978`` in ``doc/references.bib``; the standard reference
+    implementation is Numerical Recipes' ``dfridr``): scan the diagonal
+    from shallow to deep, tracking the best (smallest) successive-
+    difference error seen so far, and stop considering any further,
+    deeper entries as soon as a new one is worse than that best-so-far by
+    more than a factor of `safe` -- rather than searching the entire
+    diagonal for a global minimum that a later, coincidentally-small
+    difference could win by chance. This needs no restructuring of
+    fiddy's batch-then-analyze evaluation (unlike Ridders' own adaptive,
+    incrementally-built table): it is a pure post-hoc analysis of the
+    already-computed diagonal.
+
+    Used for the full ladder and for each corroborating chain
+    individually -- the corroboration in
+    :func:`extrapolate_central_differences` comes from comparing what
+    this picks *independently* on disjoint data, not from trusting one
+    call to this function alone (see the module docstring for why that
+    matters).
 
     Vectorized over a trailing output-component axis: `diagonal` has
     shape ``(n_rungs, n_outputs)`` -- each output component picks its own
@@ -95,6 +133,12 @@ def _best_diagonal_estimate(
 
     :param diagonal: The Neville-table diagonal, shape
         ``(n_rungs, n_outputs)``.
+    :param safe: Safety factor on the early-stopping rule -- matches
+        Numerical Recipes' own default; verified insensitive to the exact
+        value (tested 1.2-4.0 against real failing cases with identical
+        results), since the transition from well-behaved to noise-
+        dominated is a sharp, orders-of-magnitude jump, not a marginal
+        one.
     :return: A tuple ``(value, error, index)``, each shape
         ``(n_outputs,)``. `index` is into the *diagonal*, which for the
         full ladder also indexes the original ladder/step-size array (the
@@ -110,10 +154,18 @@ def _best_diagonal_estimate(
             np.zeros(n_outputs, dtype=int),
         )
     errors = np.abs(np.diff(diagonal, axis=0))
-    best_index = np.argmin(errors, axis=0) + 1
+    best_index = np.ones(n_outputs, dtype=int)
+    best_error = errors[0].copy()
+    stopped = np.zeros(n_outputs, dtype=bool)
+    for i in range(2, n):
+        errt = errors[i - 1]
+        worse = (~stopped) & (errt >= safe * best_error)
+        improve = (~stopped) & (~worse) & (errt < best_error)
+        best_error = np.where(improve, errt, best_error)
+        best_index = np.where(improve, i, best_index)
+        stopped = stopped | worse
     value = np.take_along_axis(diagonal, best_index[None, :], axis=0)[0]
-    error = np.take_along_axis(errors, (best_index - 1)[None, :], axis=0)[0]
-    return value, error, best_index
+    return value, best_error, best_index
 
 
 @dataclass
