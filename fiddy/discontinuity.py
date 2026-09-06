@@ -151,13 +151,20 @@ def check_discontinuity(
         values_2d, reference_index_arr[None, :], axis=0
     )[0]
     gap_b = np.take_along_axis(values_2d, best_index_arr[None, :], axis=0)[0]
-    predicted_gap_b = gap_a * (h_b / h_a)
-    residual = gap_b - predicted_gap_b
+    with np.errstate(divide="ignore", invalid="ignore"):
+        # `h_a`/`h_b` can both be exactly 0 for the same reason noted in
+        # `fiddy.step_size.clamp_step_to_bounds`'s docstring (a bounds-
+        # clamped direction with zero room to step at all). The resulting
+        # NaN/inf correctly makes `suspected` False below (comparisons
+        # against NaN are always False), not a discontinuity false
+        # positive.
+        predicted_gap_b = gap_a * (h_b / h_a)
+        residual = gap_b - predicted_gap_b
 
-    effective_noise = np.maximum(noise_sigma_arr, nondet_tol)
-    noise_budget = safety_factor * np.maximum(
-        effective_noise / h_b, np.finfo(float).eps
-    ) + curvature_rtol * np.abs(predicted_gap_b)
+        effective_noise = np.maximum(noise_sigma_arr, nondet_tol)
+        noise_budget = safety_factor * np.maximum(
+            effective_noise / h_b, np.finfo(float).eps
+        ) + curvature_rtol * np.abs(predicted_gap_b)
 
     suspected = (np.abs(residual) > noise_budget) & (
         np.abs(gap_b) > noise_budget
