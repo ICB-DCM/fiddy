@@ -147,6 +147,30 @@ def test_clamp_step_to_bounds_floors_at_zero_when_already_at_the_bound():
     assert h == 0.0
 
 
+def test_eps_anchored_far_ladder_is_far_smaller_than_a_typical_main_ladder():
+    """Documents the intended use of `build_step_ladder` for
+    `fiddy.estimate`'s "far" ladder (see
+    `fiddy.discontinuity.check_cross_regime_disagreement`): calling it a
+    second time with `noise_floor=numpy.finfo(float).eps` -- the
+    theoretical minimum possible noise floor (pure rounding error only) --
+    requires no signature or behavior change to this function itself, and
+    reliably produces a ladder far below a typical noise-floor-derived
+    main ladder's own finest rung."""
+    point = np.array([1.0])
+    direction = np.array([1.0])
+    main_ladder = build_step_ladder(point, direction, noise_floor=1e-9)
+    far_ladder = build_step_ladder(
+        point,
+        direction,
+        noise_floor=np.finfo(float).eps,
+        n_rungs=4,
+        step_ratio=10.0,
+    )
+
+    assert far_ladder.shape == (4,)
+    assert far_ladder[0] < main_ladder[-1]
+
+
 def test_build_step_ladder_respects_bounds():
     """Regression test for the unscaled-parameter-domain failure mode
     (e.g. a PEtab model's log10-scale parameter requiring a strictly

@@ -45,6 +45,34 @@ from a single generic probe direction across every parameter direction
 (a deliberate few-evaluations trade-off -- see its docstring), which can
 under-estimate the real per-direction noise for some models. See
 `curvature_rtol` below for the fix.
+
+**A harder, distinct failure this module's own adjacent-rung comparison
+cannot see at all: the entire ladder sitting on the wrong side of a
+hidden discontinuity.** `check_discontinuity` above only ever compares
+two rungs that are *both already inside* the step-size ladder built by
+:func:`fiddy.step_size.build_step_ladder` -- if a parameter-space
+discontinuity (e.g. an SBML event trigger) has a crossing perturbation
+smaller than the ladder's own finest rung, every rung samples the same
+wrong branch, which is locally smooth *on that branch*, so no adjacent
+pair ever disagrees. Confirmed via 13 distinct real AMICI/SBML models
+(a step-size ladder ranging from ~54% to ~0.4% relative reported a
+"converged" value 5.2x off the true one, for a case whose crossing
+perturbation was ~0.1% relative -- below the ladder's finest rung).
+:func:`check_cross_regime_disagreement` addresses this by comparing the
+main ladder's value against an independently-anchored, much-smaller-scale
+"far" ladder's value directly -- not gap-vs-predicted-gap like
+`check_discontinuity` above, since there is no reason to expect a smooth
+`O(h)` trend connects two regimes separated by many orders of magnitude
+(the same wide-h-ratio comparison that caused the first false-positive
+class documented above). A search of DERIVEST/numdifftools and the
+classical Dumontet & Vignes (1977) optimal-step literature found no
+existing published technique for this exact scenario (the ladder's
+*entire* probed range sitting on one side of a hidden threshold, not
+partially bracketing it) -- this is fiddy's own extension of the
+disagreement-between-independent-estimates idea already used for the
+two-corroborating-chains mechanism (`fiddy.extrapolation`), applied
+across two disjoint dynamic-range regimes instead of two interleaved
+rung subsets within one regime.
 """
 
 from __future__ import annotations
@@ -53,7 +81,12 @@ from dataclasses import dataclass
 
 import numpy as np
 
-__all__ = ["DiscontinuityCheck", "check_discontinuity"]
+__all__ = [
+    "DiscontinuityCheck",
+    "check_discontinuity",
+    "CrossRegimeCheck",
+    "check_cross_regime_disagreement",
+]
 
 
 @dataclass
@@ -205,4 +238,96 @@ def _squeeze_discontinuity_check(
         predicted_gap_b=float(result.predicted_gap_b[0]),
         residual=float(result.residual[0]),
         noise_budget=float(result.noise_budget[0]),
+    )
+
+
+@dataclass
+class CrossRegimeCheck:
+    suspected: bool | np.ndarray
+    disagreement: float | np.ndarray
+    """``abs(main_value - far_value)``."""
+    noise_budget: float | np.ndarray
+
+
+def check_cross_regime_disagreement(
+    main_value: float | np.ndarray,
+    far_value: float | np.ndarray,
+    far_error: float | np.ndarray,
+    noise_sigma: float | np.ndarray,
+    nondet_tol: float = 0.0,
+    safety_factor: float = 3.0,
+) -> CrossRegimeCheck:
+    """Cross-check two independently-computed derivative *values* -- from
+    two disjoint, differently-scaled step-size ladders -- for disagreement
+    a hidden discontinuity between their ranges would cause.
+
+    Unlike :func:`check_discontinuity`, this compares final values
+    directly, not gap-vs-predicted-gap: the two ladders' ranges are
+    typically separated by many orders of magnitude (by construction --
+    see :func:`fiddy.estimate._estimate_from_ladder`'s `far_ladder`), so
+    there is no reason to expect a smooth `O(h)` trend connects them the
+    way `check_discontinuity`'s linear gap-extrapolation assumes.
+
+    Self-limiting by construction: the budget is driven by `far_error`
+    (widening automatically whenever the far ladder is itself
+    noise-dominated -- expected whenever a function's real noise floor
+    sits far above machine epsilon, the far ladder's anchor -- with no
+    extra gating logic needed), not `main_error`. `main_error` is
+    deliberately *excluded* from the budget, even though it is a natural-
+    looking candidate (mirroring how :func:`fiddy.extrapolation.
+    extrapolate_central_differences` folds its own two-chain
+    disagreement against `max(chain_a_error, chain_b_error, full_error)`)
+    -- confirmed on a real, still-failing AMICI/SBML case that this is
+    actively wrong here: the main ladder's own error estimate, when it is
+    itself sitting on the wrong side of a hidden discontinuity, is not an
+    independent uncertainty measure -- it is *partially informative about
+    the same underlying problem, but underestimates it* (observed
+    consistently at roughly 1/9-1/10 of the true disagreement, close
+    enough to `check_discontinuity`'s own `safety_factor=10.0` to make a
+    shared constant systematically mask exactly the failure this check
+    exists to catch). Using only `far_error` -- the far ladder's own,
+    independent measure of how much *it* should be trusted -- avoids that
+    circularity. `safety_factor=3.0` mirrors `fiddy.check.check_gradient`'s
+    own `k` convention (a multiplier turning an error *estimate* into a
+    comparison tolerance), not `check_discontinuity`'s differently-scoped
+    `safety_factor=10.0` (calibrated for a raw noise-floor/h term, not an
+    already-safety-margined error estimate).
+
+    :param main_value: The main ladder's extrapolated value (scalar or
+        per-output-component array).
+    :param far_value: The far ladder's extrapolated value.
+    :param far_error: The far ladder's own reported error estimate.
+    :param noise_sigma: The function's empirically estimated noise floor
+        -- an additional floor on the budget, for the (expected to be
+        rare) case where `far_error` happens to be implausibly small.
+    :param nondet_tol: See :func:`check_discontinuity`.
+    :param safety_factor: Multiplier on `far_error` (and the noise-floor
+        floor) below which a disagreement is considered explainable by
+        the far ladder's own uncertainty rather than a genuine
+        cross-regime mismatch -- see this function's own docstring above
+        for why this is deliberately *not* the same constant/candidate
+        set as `check_discontinuity`'s own `safety_factor`.
+    :return: The cross-regime check result.
+    """
+    main_value = np.asarray(main_value, dtype=float)
+    far_value = np.asarray(far_value, dtype=float)
+    far_error = np.asarray(far_error, dtype=float)
+    effective_noise = np.maximum(
+        np.asarray(noise_sigma, dtype=float), nondet_tol
+    )
+
+    disagreement = np.abs(main_value - far_value)
+    noise_budget = safety_factor * np.maximum.reduce(
+        np.broadcast_arrays(
+            far_error,
+            effective_noise,
+            np.full_like(disagreement, np.finfo(float).eps),
+        )
+    )
+    suspected = disagreement > noise_budget
+
+    return CrossRegimeCheck(
+        suspected=suspected,
+        disagreement=disagreement,
+        noise_budget=noise_budget,
     )
