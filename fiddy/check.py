@@ -49,24 +49,32 @@ def _check_direction(
     expectation: float,
     tol: float | None,
     k: float,
+    rtol: float,
 ) -> DirectionCheckResult:
     """Shared pass/fail/inconclusive logic for one (direction[, output])
     pair -- used by both :func:`check_gradient` and :func:`check_jacobian`
-    so the tolerance-flooring rule (see :func:`check_gradient`'s `k`
-    parameter) has exactly one implementation.
+    so the tolerance-flooring rule (see :func:`check_gradient`'s `k` and
+    `rtol` parameters) has exactly one implementation.
 
     :param direction_index: The direction's index, for the result.
     :param estimate: The direction's finite-difference estimate.
     :param expectation: The value being checked against.
-    :param tol: A fixed tolerance, or `None` to auto-derive one from `k`.
+    :param tol: A fixed tolerance, or `None` to auto-derive one from `k`/
+        `rtol`.
     :param k: Multiplier on `estimate`'s own error estimate, used when
         `tol` is `None`.
+    :param rtol: Relative-tolerance floor, used when `tol` is `None`; see
+        :func:`check_gradient`.
     :return: The pass/fail/inconclusive result for this direction.
     """
     direction_tol = (
         tol
         if tol is not None
-        else max(k * estimate.error_estimate, estimate.diagnostics["tol"])
+        else max(
+            k * estimate.error_estimate,
+            estimate.diagnostics["tol"],
+            rtol * max(abs(estimate.value), abs(expectation)),
+        )
     )
     if estimate.status != "converged":
         outcome = "inconclusive"
@@ -188,6 +196,7 @@ def check_gradient(
     rng: Type.SEED_LIKE | Type.RNG_LIKE | None = None,
     tol: float | None = None,
     k: float = 3.0,
+    rtol: float = 1e-8,
     noise_floor: float | None = None,
     nondet_tol: float = 0.0,
     n_rungs: int = 8,
@@ -232,17 +241,36 @@ def check_gradient(
         per-model tuning this API is meant to make unnecessary.
     :param k: Multiplier on each direction's own FD error estimate to get
         its tolerance (``tol_direction = max(k * error_estimate,
-        estimate.diagnostics["tol"])``) when `tol` is not given -- one
-        small, model-independent constant rather than a per-model
-        tolerance. Calibrated against a real ODE-based likelihood: every
-        direction's actual error there was already within 1x its own
-        reported error estimate, so `k=3` leaves comfortable headroom
-        without reintroducing per-model tuning. The engine's own noise-
-        derived `tol` is used as a floor because `error_estimate` can
-        legitimately come out as exactly 0 (the corroborating chains and
-        full ladder all agreeing to double precision by coincidence for
-        a genuinely smooth function) -- `k * 0` would otherwise demand an
-        unreachable exact match.
+        estimate.diagnostics["tol"], rtol * max(|value|, |expected|))``)
+        when `tol` is not given -- one small, model-independent constant
+        rather than a per-model tolerance. Calibrated against a real
+        ODE-based likelihood: every direction's actual error there was
+        already within 1x its own reported error estimate, so `k=3`
+        leaves comfortable headroom without reintroducing per-model
+        tuning. The engine's own noise-derived `tol` is used as a floor
+        because `error_estimate` can legitimately come out as exactly 0
+        (the corroborating chains and full ladder all agreeing to double
+        precision by coincidence for a genuinely smooth function) --
+        `k * 0` would otherwise demand an unreachable exact match.
+    :param rtol: Relative-tolerance floor on top of `k`/`estimate.diagnostics["tol"]`
+        (see above), following the symmetric relative-error convention
+        (``Cs231n`` in ``doc/references.bib``). Needed for directions
+        whose parameter barely perturbs the underlying computation (e.g.
+        a pure output-scaling factor that never enters an ODE's
+        dynamics): fiddy's own re-evaluation noise there is measured as
+        spuriously tiny, understating the real achievable agreement with
+        an *independently computed* `expected` (e.g. a solver's own
+        analytic/adjoint sensitivity) -- which has its own, unrelated
+        floating-point-accumulation floor that scales with the value's
+        own magnitude, not with fiddy's self-consistency. Found on two
+        real models: `expected`/`estimate.value` agreed to `~3.2e-10`
+        and `~3.1e-12` relative error respectively while fiddy's other
+        two tolerance terms were several orders of magnitude tighter than
+        that gap. `rtol=1e-8` leaves roughly the same margin above that
+        measured floor as `k`'s own calibration story above, while
+        staying far tighter than would risk hiding a genuine small-
+        percentage sensitivity bug (e.g. an under-tightened solver
+        tolerance on the sensitivity equations specifically).
     :param noise_floor: See :func:`fiddy.estimate.estimate_gradient`.
     :param nondet_tol: See :func:`fiddy.estimate.estimate_gradient`.
     :param n_rungs: See :func:`fiddy.estimate.estimate_gradient`.
@@ -322,7 +350,7 @@ def check_gradient(
     # already used for its own "converged" classification) as a floor for
     # exactly this case -- see `_check_direction`.
     direction_results = [
-        _check_direction(i, estimate, expectation, tol, k)
+        _check_direction(i, estimate, expectation, tol, k, rtol)
         for i, (estimate, expectation) in enumerate(
             zip(estimates, expected, strict=True)
         )
@@ -462,6 +490,7 @@ def check_jacobian(
     directions: list[Type.DIRECTION] | None = None,
     tol: float | None = None,
     k: float = 3.0,
+    rtol: float = 1e-8,
     noise_floor: float | None = None,
     nondet_tol: float = 0.0,
     n_rungs: int = 8,
@@ -494,6 +523,8 @@ def check_jacobian(
         every (output, direction) pair.
     :param k: See :func:`check_gradient` -- applied identically to every
         (output, direction) pair.
+    :param rtol: See :func:`check_gradient` -- applied identically to
+        every (output, direction) pair.
     :param noise_floor: Forwarded to
         :func:`fiddy.estimate.estimate_jacobian`.
     :param nondet_tol: Forwarded to
@@ -532,7 +563,7 @@ def check_jacobian(
     output_results = []
     for j, row in enumerate(jacobian.estimates):
         direction_results = [
-            _check_direction(i, estimate, expectation, tol, k)
+            _check_direction(i, estimate, expectation, tol, k, rtol)
             for i, (estimate, expectation) in enumerate(
                 zip(row, expected_flat[j], strict=True)
             )

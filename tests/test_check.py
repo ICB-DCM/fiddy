@@ -78,6 +78,74 @@ def test_tolerance_is_auto_derived_per_direction():
     assert error_estimates[0] != error_estimates[1]
 
 
+def test_rtol_floor_passes_a_large_magnitude_direction_with_tiny_relative_error():
+    """A direction whose derivative barely varies with fiddy's own probe
+    (here: an exactly linear function, so fiddy's re-evaluation noise is
+    measured as near-zero) must not demand near-exact agreement with an
+    independently-supplied `expected` that differs only by a tiny
+    *relative* amount on a large-magnitude value -- exactly the real
+    failure mode found checking AMICI models (a pure output-scaling
+    parameter whose FD estimate and analytic sensitivity agreed to
+    ~1e-10 relative error, but failed the old, purely noise-derived
+    tolerance by ~900x). Passing `rtol=0.0` reproduces the old
+    (pre-fix) behavior and must still fail, confirming this scenario
+    genuinely needs the new floor, not something else already covering
+    it."""
+
+    def f(x):
+        return np.array([1e8 * x[0]])
+
+    point = np.array([5.0])
+    true_derivative = 1e8
+    expected = [true_derivative * (1 + 1e-10)]
+
+    result = check_gradient(f, point, expected)
+    assert result.success
+    result.assert_success()  # must not raise
+
+    result_without_rtol = check_gradient(f, point, expected, rtol=0.0)
+    assert not result_without_rtol.success
+
+
+def test_rtol_floor_does_not_mask_a_real_relative_error():
+    """A negative control: the same large-magnitude scenario as above,
+    but `expected` differs by a relative amount (1e-4) clearly larger
+    than the default `rtol` (1e-8) -- representative of a genuine
+    small-percentage sensitivity bug (e.g. an under-tightened solver
+    tolerance). Must still fail; guards against `rtol` ever being
+    loosened far enough to swallow this class of real bug."""
+
+    def f(x):
+        return np.array([1e8 * x[0]])
+
+    point = np.array([5.0])
+    true_derivative = 1e8
+    wrong_expected = [true_derivative * (1 + 1e-4)]
+
+    result = check_gradient(f, point, wrong_expected)
+
+    assert not result.success
+
+
+def test_rtol_floor_does_not_mask_a_wrong_near_zero_derivative():
+    """The new relative floor must stay a no-op when the true derivative
+    is near zero (common for `check_jacobian`'s independent output
+    components) -- `rtol * max(|value|, |expected|)` only grows large
+    enough to matter when *both* sides are large-magnitude, so a clearly
+    wrong small-magnitude `expected` must still fail."""
+
+    def f(x):
+        return np.array([x[0]])
+
+    point = np.array([1.0, 2.0])
+    direction = np.array([0.0, 1.0])  # derivative wrt x[1] is exactly 0
+    wrong_expected = [0.05]
+
+    result = check_gradient(f, point, wrong_expected, directions=[direction])
+
+    assert not result.success
+
+
 def test_mismatched_expected_length_raises():
     def f(x):
         return np.array([x[0] + x[1]])
@@ -201,6 +269,25 @@ def test_check_jacobian_fails_with_wrong_expected():
     assert not result.success
     with pytest.raises(AssertionError):
         result.assert_success()
+
+
+def test_check_jacobian_inherits_the_rtol_floor():
+    """`check_jacobian` shares `_check_direction` with `check_gradient`,
+    so it must inherit the same relative-tolerance floor for a
+    large-magnitude output with a tiny relative error against `expected`
+    (see `test_rtol_floor_passes_a_large_magnitude_direction_with_tiny_relative_error`)."""
+
+    def f(x):
+        return {"a": np.array([1e8 * x[0]])}
+
+    point = np.array([5.0])
+    true_derivative = 1e8
+    expected = {"a": np.array([[true_derivative * (1 + 1e-10)]])}
+
+    result = check_jacobian(f, point, expected)
+
+    assert result.success
+    result.assert_success()  # must not raise
 
 
 def test_check_jacobian_output_lookup_by_name():
