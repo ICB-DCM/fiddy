@@ -49,7 +49,12 @@ doc = [
 examples = ["notebook", "scipy", "matplotlib"]
 tests = ["pytest", "scipy", "matplotlib"]
 dev = ["pre-commit", "tox"]
-all = ["fiddy[examples]", "fiddy[tests]"]
+# Optional, informational-only comparison baselines for `benchmarks/`
+# (accuracy-per-evaluation vs. numdifftools/scipy.differentiate) -- not a
+# runtime dependency of fiddy's own engine. scipy>=1.15 for
+# `scipy.differentiate`, added in that release.
+benchmark = ["numdifftools", "scipy>=1.15"]
+all = ["fiddy[examples]", "fiddy[tests]", "fiddy[benchmark]"]
 
 [tool.setuptools.packages.find]
 include = ["fiddy*"]
