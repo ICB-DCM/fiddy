@@ -36,9 +36,14 @@ extensions = [
     "sphinx_autodoc_typehints",
     "sphinx.ext.intersphinx",
     "sphinx.ext.mathjax",
+    "sphinxcontrib.bibtex",
     "nbsphinx",
     "IPython.sphinxext.ipython_console_highlighting",
 ]
+
+# sphinxcontrib-bibtex: renders `references.bib` (the algorithms/
+# conventions fiddy's docstrings cite by key) as :doc:`references`.
+bibtex_bibfiles = ["references.bib"]
 
 intersphinx_mapping = {
     "pandas": ("https://pandas.pydata.org/docs/", None),
