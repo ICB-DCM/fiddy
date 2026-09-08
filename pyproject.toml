@@ -53,6 +53,7 @@ doc = [
     # Sphinx>=9 (verified directly); also the release that added
     # Sphinx>=9.1 support at all.
     "sphinx-autodoc-typehints>=3",
+    "sphinxcontrib-bibtex",
 ]
 examples = ["notebook", "scipy", "matplotlib"]
 tests = ["pytest", "scipy", "matplotlib"]

@@ -50,6 +50,7 @@ releases, so pinning an exact version is advisable. Optional extras:
 
    about
    examples/derivative
+   references
 
 .. toctree::
    :maxdepth: 4

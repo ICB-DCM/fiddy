@@ -30,7 +30,7 @@
   author = {D'Errico, John},
   title  = {{DERIVEST}: {A}daptive {R}obust {N}umerical {D}ifferentiation},
   year   = {2006},
-  note   = {MATLAB implementation, later ported to Python as \texttt{numdifftools}.},
+  note   = {MATLAB implementation, later ported to Python as numdifftools.},
   url    = {https://numdifftools.readthedocs.io/en/stable/src/numerical/derivest.html},
 }
 
@@ -48,12 +48,12 @@
   title     = {Numerical Methods for Unconstrained Optimization and Nonlinear Equations},
   publisher = {Prentice-Hall},
   year      = {1983},
-  note      = {Section 5.4: the classical central-difference truncation/rounding trade-off, {\(}h^\ast \sim \varepsilon^{1/3}{\)} for noise level {\(}\varepsilon{\)}.},
+  note      = {Section 5.4: the classical central-difference truncation/rounding trade-off, h* approximately eps^(1/3) for noise level eps.},
 }
 
 @misc{Finitediffjl,
   title = {{FiniteDiff.jl}: Step size selection},
-  note  = {Documents the practical hybrid \texttt{max(relstep*|x|, absstep)} step-size scaling.},
+  note  = {Documents the practical hybrid max(relstep*|x|, absstep) step-size scaling.},
   url   = {https://docs.sciml.ai/FiniteDiff/dev/epsilons/},
 }
 
@@ -65,14 +65,14 @@
 }
 
 @misc{TorchGradcheck,
-  title  = {\texttt{torch.autograd.gradcheck}},
+  title  = {torch.autograd.gradcheck},
   author = {{PyTorch}},
-  note   = {\texttt{nondet\_tol}: tolerates a function returning slightly different values on repeated calls at the same point. \texttt{fast\_mode}: checks via a few random-direction projections instead of one evaluation per parameter.},
+  note   = {nondet_tol: tolerates a function returning slightly different values on repeated calls at the same point. fast_mode: checks via a few random-direction projections instead of one evaluation per parameter.},
   url    = {https://docs.pytorch.org/docs/stable/generated/torch.autograd.gradcheck.gradgradcheck.html},
 }
 
 @misc{JaxCheckGrads,
-  title  = {\texttt{jax.test\_util.check\_grads}},
+  title  = {jax.test_util.check_grads},
   author = {{JAX}},
   note   = {Single-random-direction default for cheap gradient checks.},
   url    = {https://docs.jax.dev/en/latest/_autosummary/jax.test_util.check_grads.html},
@@ -81,7 +81,7 @@
 @misc{Cs231n,
   title  = {{CS231n} Convolutional Neural Networks for Visual Recognition: Gradient checks},
   author = {Karpathy, Andrej and {Stanford CS231n staff}},
-  note   = {Symmetric relative error {\(}|a-n| / \max(|a|,|n|,\varepsilon){\)}; mismatches near kinks (non-differentiable points) are expected, not bugs; a single global tolerance is not appropriate everywhere.},
+  note   = {Symmetric relative error |a-n| / max(|a|,|n|,eps); mismatches near kinks (non-differentiable points) are expected, not bugs; a single global tolerance is not appropriate everywhere.},
   url    = {https://cs231n.github.io/neural-networks-3/},
 }
 
@@ -94,5 +94,5 @@
   number  = {3},
   pages   = {175--184},
   doi     = {10.1093/comjnl/3.3.175},
-  note    = {The classic ill-conditioned/badly-scaled test function (\texttt{benchmarks/functions.py}'s \texttt{ill\_conditioned}): curvature along one axis is orders of magnitude steeper than along the other near the point checked.},
+  note    = {The classic ill-conditioned/badly-scaled test function (benchmarks/functions.py's ill_conditioned): curvature along one axis is orders of magnitude steeper than along the other near the point checked.},
 }
