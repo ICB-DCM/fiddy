@@ -116,15 +116,7 @@ def _ensure_function(function: Type.FUNCTION) -> Function:
 def _validate_point_in_bounds(
     point: np.ndarray, bounds: Type.BOUNDS | None
 ) -> None:
-    """Raise a clear error if `point` itself already violates `bounds`,
-    rather than silently letting bounds-aware clamping (see
-    :func:`fiddy.step_size.clamp_step_to_bounds`) collapse every probe/
-    ladder step down to zero and produce a confusing, uniformly
-    "noise_dominated" result with no indication of the real cause.
-    Mirrors `scipy.optimize.approx_derivative`'s own behavior for an
-    infeasible `x0`. Found via a real regression: a caller's own jittered
-    starting point pushed one parameter past its declared bound, silently
-    crushing every direction's noise-floor estimate instead of raising.
+    """Raise a clear error if `point` itself already violates `bounds`.
 
     :param point: The point to validate.
     :param bounds: `(lower, upper)`, or `None` to skip validation.
@@ -260,10 +252,8 @@ class DerivativeEstimate:
     far_extrapolation: ExtrapolationResult | None = None
     """The independently-anchored "far" ladder's own extrapolation result
     (see :func:`fiddy.step_size.build_step_ladder`'s `noise_floor=
-    numpy.finfo(float).eps` use in `_estimate_from_ladder`) -- `None` only
-    if no far ladder was supplied (internal/testing use of
-    `_estimate_from_ladder`; every public entry point always supplies
-    one)."""
+    numpy.finfo(float).eps` use) -- `None` only if no far ladder was
+    supplied; every public entry point always supplies one."""
     far_discontinuity: DiscontinuityCheck | None = None
     """The far ladder's own adjacent-rung discontinuity check -- catches
     an ordinary in-range kink on the far side too, independently of the

@@ -173,9 +173,11 @@ class CachedFunction(Function):
     Cached data may persist, but can be removed by calling
     `CachedFunction.delete_cache()`. If the wrapped function is a closure
     (captures variables from an enclosing scope), it is automatically
-    given a unique identity before caching -- see
-    :func:`_disambiguate_closure` for why this is necessary for
-    correctness, not just hygiene.
+    given a unique identity before caching -- `joblib.Memory` identifies
+    a cached function only by ``(module, qualname, source text, call
+    arguments)``, blind to a closure's captured variables, so two
+    closures sharing the same defining code but different captured state
+    could otherwise silently collide in the cache.
 
     :ivar function: The function.
     :ivar cache_path: The path to the cache (disk or RAM).

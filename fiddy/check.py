@@ -545,8 +545,7 @@ def check_jacobian(
     :param expected: The Jacobian to check against -- either a plain
         array of shape ``(n_outputs, n_directions)``, or (if `function`
         returns a named dict) a dict mapping each output name to an
-        array of shape ``(*that output's shape, n_directions)`` -- see
-        :func:`_flatten_expected_jacobian`.
+        array of shape ``(*that output's shape, n_directions)``.
     :param directions: Defaults to the standard basis (one direction per
         component of `point`), i.e. the full Jacobian.
     :param atol: See :func:`check_gradient` -- applied identically to
