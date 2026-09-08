@@ -39,7 +39,7 @@ multi-output function like any other.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Any
+from typing import Any, TypedDict
 
 import numpy as np
 
@@ -65,11 +65,32 @@ from .step_size import build_step_ladder
 
 __all__ = [
     "DerivativeEstimate",
+    "EstimateKwargs",
     "JacobianEstimate",
     "estimate_directional_derivative",
     "estimate_gradient",
     "estimate_jacobian",
 ]
+
+
+class EstimateKwargs(TypedDict, total=False):
+    """Options shared by :func:`estimate_gradient`/:func:`estimate_jacobian`
+    -- see their docstrings (and :func:`estimate_directional_derivative`
+    for the most detailed per-option rationale). Forwarded as-is by
+    :func:`fiddy.check.check_gradient`/:func:`fiddy.check.check_jacobian`
+    via ``**estimate_kwargs`` rather than being re-declared on those call
+    sites too.
+    """
+
+    noise_floor: float | None
+    nondet_tol: float
+    n_rungs: int
+    step_ratio: float
+    n_rungs_far: int
+    step_ratio_far: float
+    bounds: Type.BOUNDS | None
+    noise_floor_strategy: str
+    executor: Executor | None
 
 
 def _ensure_function(function: Type.FUNCTION) -> Function:
