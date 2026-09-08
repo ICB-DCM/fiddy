@@ -5,30 +5,16 @@
 [![Documentation](https://readthedocs.org/projects/fiddy/badge/?version=latest)](https://fiddy.readthedocs.io)
 
 Robust [finite difference](https://en.wikipedia.org/wiki/Finite_difference)
-gradient checking for blackbox functions -- with a particular focus on
-functions that are noisy (e.g. adaptive-step ODE solvers), expensive to
-evaluate, and where you don't want to hand-tune step sizes or tolerances
-per model.
+derivative estimation and gradient checking for blackbox functions -- with
+a particular focus on functions that are noisy (e.g. adaptive-step ODE
+solvers), expensive to evaluate, and where you don't want to hand-tune
+step sizes or tolerances per model.
 
-```python
-from fiddy import check_gradient
+## Estimating a gradient
 
-result = check_gradient(function, point, expected_gradient)
-result.assert_success()
-```
-
-No step sizes, and by default no tolerance: `fiddy` empirically estimates
-the function's own noise floor, builds an appropriate step-size ladder,
-extrapolates a value with a corroborated error estimate, and derives each
-direction's check tolerance from that error estimate automatically. See
-`doc/examples/derivative.ipynb` for a guided walkthrough of the problems
-this solves (noise, kinks, near-zero gradients) and how.
-
-## Computing a gradient (not just checking one)
-
-The same engine that backs `check_gradient` is available directly, with no
-`expected` gradient required -- useful when you want an FD gradient
-computed, not compared against something else:
+No step sizes to choose: fiddy empirically estimates the function's own
+noise floor, builds an appropriate step-size ladder, and extrapolates a
+value with a corroborated error estimate.
 
 ```python
 from fiddy import estimate_gradient
@@ -43,29 +29,23 @@ results = estimate_gradient(function, np.array([0.6, -0.3]))
 gradient = np.array([r.value for r in results])
 ```
 
-Each entry in `results` is a full `DerivativeEstimate`, not just a number:
-`r.error_estimate` and `r.status` (e.g. `"converged"`, `"noise_dominated"`,
-`"discontinuity_suspected"`) let you decide whether to trust a given
-gradient component, rather than silently using a value that may be
-noise-dominated or meaningless (e.g. at a genuine kink). `estimate_gradient`
-also accepts `executor=` (`fiddy.executor.JoblibExecutor()` for
-process-based parallelism) and `directions=` (to compute only a subset of
-components).
+Each entry is a `DerivativeEstimate`, not just a number: `r.error_estimate`/
+`r.status` flag noise-dominated or meaningless (e.g. kink) values instead
+of silently trusting them, backed by lower-level diagnostics (`fiddy.noise`,
+`fiddy.extrapolation`, ...) if you need to dig further.
 
-The rest of the layered engine (`fiddy.noise`, `fiddy.extrapolation`, ...)
-is available too, for custom tolerances or lower-level diagnostics.
+See `doc/examples/derivative.ipynb` for a guided walkthrough of the
+problems this solves (noise, kinks, near-zero gradients) and how.
 
-## Checking/computing every output at once (a Jacobian, not just a gradient)
+## Every output at once (a Jacobian, not just a gradient)
 
-`check_gradient`/`estimate_gradient` estimate the derivative of a single
-plain value. If your function instead returns a `dict` of named arrays
-(e.g. `{"x": ..., "y": ..., "llh": ...}`), `check_jacobian`/
-`estimate_jacobian` check/compute *every* named output's derivative at
-once, from the very same batch of perturbed-point evaluations -- checking
-N outputs costs no more function evaluations than checking 1:
+If your function instead returns a `dict` of named arrays (e.g. `{"x":
+..., "y": ..., "llh": ...}`), `estimate_jacobian` estimates *every* named
+output's derivative at once, from the same batch of perturbed-point
+evaluations -- N outputs cost no more function evaluations than 1:
 
 ```python
-from fiddy import check_jacobian
+from fiddy import estimate_jacobian
 import numpy as np
 
 
@@ -73,24 +53,33 @@ def function(x):
     return {"a": x[0] ** 2 + x[1], "b": np.sin(x[0]) * x[1]}
 
 
-point = np.array([1.3, 0.6])
-# One row per output ("a", "b"), one column per direction (x[0], x[1]).
-expected = {
-    "a": np.array([2 * point[0], 1.0]),
-    "b": np.array([np.cos(point[0]) * point[1], np.sin(point[0])]),
-}
-
-result = check_jacobian(function, point, expected)
-result.output("a").assert_success()  # a per-output GradientCheckResult
+jacobian = estimate_jacobian(function, np.array([1.3, 0.6]))
+jacobian.values  # shape (n_outputs, n_directions)
+jacobian.output("a")  # one output's DerivativeEstimate per direction
 ```
 
-`estimate_jacobian` is the "compute, don't check" counterpart, returning a
-`JacobianEstimate` indexed `[output][direction]` (or by output name via
-`.output(...)`).
+## Checking a gradient against an expected value
 
-# Installation
+`check_gradient`/`check_jacobian` wrap the same engine to compare against
+something already computed (e.g. an analytic/adjoint gradient), auto-
+deriving each direction's tolerance from its own error estimate -- no
+tolerance to tune by default:
 
-Currently under development, please install from source.
+```python
+from fiddy import check_gradient
+
+result = check_gradient(function, point, expected_gradient)
+result.assert_success()
+```
+
+`check_jacobian` is the equivalent for a dict-returning function, taking
+`expected` as either a plain array or the same named-dict shape as
+`function`'s own output.
+
+## Installation
+
+Currently under development -- the API may still change between
+releases, so pinning an exact version is advisable. Install from source:
 ```bash
 pip install -e .
 ```
