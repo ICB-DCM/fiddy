@@ -22,6 +22,7 @@ from dataclasses import dataclass, field
 
 import numpy as np
 import pandas as pd
+from numpy.typing import ArrayLike
 
 from ._report import _get_printable_value, _wide_display
 from .constants import Type
@@ -205,7 +206,7 @@ class GradientCheckResult:
 def check_gradient(
     function: Type.FUNCTION,
     point: Type.POINT,
-    expected,
+    expected: ArrayLike,
     directions: list[Type.DIRECTION] | None = None,
     random_directions: int | None = None,
     rng: Type.SEED_LIKE | Type.RNG_LIKE | None = None,
@@ -547,7 +548,7 @@ def _flatten_expected_jacobian(
 def check_jacobian(
     function: Type.FUNCTION,
     point: Type.POINT,
-    expected,
+    expected: ArrayLike | dict[str, ArrayLike],
     directions: list[Type.DIRECTION] | None = None,
     tol: float | None = None,
     k: float = 3.0,
