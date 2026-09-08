@@ -24,10 +24,9 @@ class Type:
     RAW_FUNCTION_OUTPUT = ARRAY | dict[str, ARRAY]
     FUNCTION = Callable[[POINT], FUNCTION_OUTPUT]
     #: Anything :func:`numpy.random.default_rng` accepts to seed a fresh
-    #: `Generator`, per `SPEC 7
-    #: <https://scientific-python.org/specs/spec-0007/>`_.
+    #: `Generator`
     SEED_LIKE = int | np.integer | Sequence[int] | np.random.SeedSequence
-    #: An already-constructed random generator, per SPEC 7.
+    #: An already-constructed random generator.
     RNG_LIKE = np.random.Generator | np.random.BitGenerator
     #: A per-parameter valid domain, ``(lower, upper)``, each the same
     #: shape as `POINT` -- following scipy's `optimize.approx_derivative`

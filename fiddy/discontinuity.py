@@ -264,9 +264,10 @@ def check_cross_regime_disagreement(
     Unlike :func:`check_discontinuity`, this compares final values
     directly, not gap-vs-predicted-gap: the two ladders' ranges are
     typically separated by many orders of magnitude (by construction --
-    see :func:`fiddy.estimate._estimate_from_ladder`'s `far_ladder`), so
-    there is no reason to expect a smooth `O(h)` trend connects them the
-    way `check_discontinuity`'s linear gap-extrapolation assumes.
+    see :func:`fiddy.estimate.estimate_gradient`'s `n_rungs_far`/
+    `step_ratio_far`), so there is no reason to expect a smooth `O(h)`
+    trend connects them the way `check_discontinuity`'s linear
+    gap-extrapolation assumes.
 
     Self-limiting by construction: the budget is driven by `far_error`
     (widening automatically whenever the far ladder is itself

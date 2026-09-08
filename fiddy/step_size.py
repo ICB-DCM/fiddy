@@ -44,15 +44,14 @@ def clamp_step_to_bounds(
     Finds the largest ``h' <= h`` such that ``point + t * direction``
     stays within ``bounds`` for every ``t`` in ``[-h', h']`` (safe for
     both the forward and backward evaluation of a central difference),
-    following scipy's own ``optimize.approx_derivative``
-    (:func:`_adjust_scheme_to_bounds`) convention for `bounds`, without
-    its one-sided-scheme fallback: if a symmetric step this small already
-    cannot fit, this simply shrinks it -- potentially all the way to a
-    step size that reports a direction as noise-dominated rather than
-    converged -- rather than adding a second, asymmetric evaluation
-    scheme purely to extract a few more directions' worth of confident
-    answers. Consistent with fiddy's "honest uncertainty over confident
-    wrongness" design.
+    following scipy's own ``optimize.approx_derivative`` convention for
+    `bounds`, without its one-sided-scheme fallback: if a symmetric step
+    this small already cannot fit, this simply shrinks it -- potentially
+    all the way to a step size that reports a direction as noise-
+    dominated rather than converged -- rather than adding a second,
+    asymmetric evaluation scheme purely to extract a few more
+    directions' worth of confident answers. Consistent with fiddy's
+    "honest uncertainty over confident wrongness" design.
 
     :param point: The point the step is taken from.
     :param direction: The direction the step is taken along.

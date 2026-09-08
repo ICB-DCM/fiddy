@@ -35,9 +35,9 @@ described above, even with corroboration already in place: it picked the
 deepest, most noise-contaminated table entry because two deep entries
 happened to coincide, while several shallower entries in the very same
 table were dramatically more accurate (up to ~3.8 million times, in one
-confirmed case). :func:`_best_diagonal_estimate` now follows Ridders'
-method's early-stopping rule instead (see its own docstring) -- fixing
-the value-selection problem directly, rather than only widening the
+confirmed case). The table-entry-selection step now follows Ridders'
+method's early-stopping rule instead, fixing the value-selection problem
+directly, rather than only widening the
 error bar around a value that was still avoidably wrong.
 """
 
