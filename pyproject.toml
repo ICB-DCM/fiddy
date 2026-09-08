@@ -18,15 +18,22 @@ classifiers = [
     "Operating System :: OS Independent",
     "Programming Language :: Python",
     "Programming Language :: Python :: 3.12",
-    "Programming Language :: Python :: 3.11",
-    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
 ]
 dependencies = [
-    "joblib",
-    "numpy",
-    "pandas"
+    # 1.4.2 (2024-05-02): latest stable release from around the same time
+    # as this project's numpy/Python floor (no numpy dependency of its
+    # own, and no Python 3.12-specific compatibility fixes needed --
+    # joblib's own `requires_python` floor is far below 3.12 at every
+    # release checked).
+    "joblib>=1.4.2",
+    "numpy>=2.2",
+    # 2.2.2 (2024-04-10): earlier 2.2.x releases pin `numpy<2`; this is
+    # the first pandas release actually compatible with numpy>=2.2.
+    "pandas>=2.2.2",
 ]
-requires-python = ">=3.10"
+requires-python = ">=3.12"
 
 [project.urls]
 Homepage = "https://github.com/icb-dcm/fiddy"
@@ -63,7 +70,7 @@ include = ["fiddy*"]
 
 [tool.ruff]
 line-length = 79
-target-version = "py310"
+target-version = "py312"
 lint.select = [
     "F",  # Pyflakes
     "I",  # isort
