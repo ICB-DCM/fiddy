@@ -48,41 +48,41 @@ def _check_direction(
     direction_index: int,
     estimate: DerivativeEstimate,
     expectation: float,
-    tol: float | None,
-    k: float,
+    atol: float | None,
+    safety_factor: float,
     rtol: float,
     direction_label: str | None = None,
 ) -> DirectionCheckResult:
     """Shared pass/fail/inconclusive logic for one (direction[, output])
     pair -- used by both :func:`check_gradient` and :func:`check_jacobian`
-    so the tolerance-flooring rule (see :func:`check_gradient`'s `k` and
-    `rtol` parameters) has exactly one implementation.
+    so the tolerance-flooring rule (see :func:`check_gradient`'s
+    `safety_factor` and `rtol` parameters) has exactly one implementation.
 
     :param direction_index: The direction's index, for the result.
     :param estimate: The direction's finite-difference estimate.
     :param expectation: The value being checked against.
-    :param tol: A fixed tolerance, or `None` to auto-derive one from `k`/
-        `rtol`.
-    :param k: Multiplier on `estimate`'s own error estimate, used when
-        `tol` is `None`.
-    :param rtol: Relative-tolerance floor, used when `tol` is `None`; see
-        :func:`check_gradient`.
+    :param atol: A fixed absolute tolerance, or `None` to auto-derive one
+        from `safety_factor`/`rtol`.
+    :param safety_factor: Multiplier on `estimate`'s own error estimate,
+        used when `atol` is `None`.
+    :param rtol: Relative-tolerance floor, used when `atol` is `None`;
+        see :func:`check_gradient`.
     :param direction_label: Optional, purely cosmetic label for this
         direction -- see :func:`check_gradient`'s `direction_labels`.
     :return: The pass/fail/inconclusive result for this direction.
     """
-    direction_tol = (
-        tol
-        if tol is not None
+    direction_atol = (
+        atol
+        if atol is not None
         else max(
-            k * estimate.error_estimate,
+            safety_factor * estimate.error_estimate,
             estimate.diagnostics["tol"],
             rtol * max(abs(estimate.value), abs(expectation)),
         )
     )
     if estimate.status != "converged":
         outcome = "inconclusive"
-    elif abs(estimate.value - expectation) <= direction_tol:
+    elif abs(estimate.value - expectation) <= direction_atol:
         outcome = "passed"
     else:
         outcome = "failed"
@@ -90,7 +90,7 @@ def _check_direction(
         direction_index=direction_index,
         test=estimate.value,
         expectation=float(expectation),
-        tol=direction_tol,
+        atol=direction_atol,
         outcome=outcome,
         estimate=estimate,
         direction_label=direction_label,
@@ -104,8 +104,8 @@ class DirectionCheckResult:
     """The finite-difference estimate."""
     expectation: float
     """The supplied gradient value being checked."""
-    tol: float
-    """The tolerance used for this direction."""
+    atol: float
+    """The absolute tolerance used for this direction."""
     outcome: str
     """One of "passed", "failed", "inconclusive" -- "inconclusive" means
     the FD engine itself could not produce a trustworthy estimate for this
@@ -142,7 +142,7 @@ class GradientCheckResult:
                 "test": r.test,
                 "expectation": r.expectation,
                 "abs_diff": abs(r.test - r.expectation),
-                "tol": r.tol,
+                "atol": r.atol,
                 "status": r.estimate.status,
                 "outcome": r.outcome,
             }
@@ -193,7 +193,7 @@ class GradientCheckResult:
             notable = notable.loc[
                 notable["abs_diff"].sort_values(ascending=False).index
             ]
-            for column in ("test", "expectation", "abs_diff", "tol"):
+            for column in ("test", "expectation", "abs_diff", "atol"):
                 notable[column] = notable[column].map(_get_printable_value)
             lines.append("")
             lines.append("Non-passing directions (failed and inconclusive):")
@@ -210,8 +210,8 @@ def check_gradient(
     directions: list[Type.DIRECTION] | None = None,
     random_directions: int | None = None,
     rng: Type.SEED_LIKE | Type.RNG_LIKE | None = None,
-    tol: float | None = None,
-    k: float = 3.0,
+    atol: float | None = None,
+    safety_factor: float = 3.0,
     rtol: float = 1e-8,
     noise_floor: float | None = None,
     nondet_tol: float = 0.0,
@@ -257,31 +257,34 @@ def check_gradient(
         directions (only used with `random_directions`), per `SPEC 7
         <https://scientific-python.org/specs/spec-0007/>`_ -- anything
         :func:`numpy.random.default_rng` accepts.
-    :param tol: Optional fixed tolerance applied to every direction,
-        bypassing the default per-direction auto-derived tolerance.
-        Prefer leaving this as `None` -- a fixed tolerance is exactly the
-        per-model tuning this API is meant to make unnecessary.
-    :param k: Multiplier on each direction's own FD error estimate to get
-        its tolerance (``tol_direction = max(k * error_estimate,
-        estimate.diagnostics["tol"], rtol * max(|value|, |expected|))``)
-        when `tol` is not given -- one small, model-independent constant
-        rather than a per-model tolerance. Calibrated against a real
-        ODE-based likelihood: every direction's actual error there was
-        already within 1x its own reported error estimate, so `k=3`
-        leaves comfortable headroom without reintroducing per-model
-        tuning. The engine's own noise-derived `tol` is used as a floor
-        because `error_estimate` can legitimately come out as exactly 0
-        (the corroborating chains and full ladder all agreeing to double
-        precision by coincidence for a genuinely smooth function) --
-        `k * 0` would otherwise demand an unreachable exact match.
-    :param rtol: Relative-tolerance floor on top of `k`/`estimate.diagnostics["tol"]`
-        (see above), following the symmetric relative-error convention
-        (``Cs231n`` in ``doc/references.bib``). Needed for directions
-        whose parameter barely perturbs the underlying computation (e.g.
-        a pure output-scaling factor that never enters an ODE's
-        dynamics): fiddy's own re-evaluation noise there is measured as
-        spuriously tiny, understating the real achievable agreement with
-        an *independently computed* `expected` (e.g. a solver's own
+    :param atol: Optional fixed absolute tolerance applied to every
+        direction, bypassing the default per-direction auto-derived
+        tolerance. Prefer leaving this as `None` -- a fixed tolerance is
+        exactly the per-model tuning this API is meant to make
+        unnecessary.
+    :param safety_factor: Multiplier on each direction's own FD error
+        estimate to get its tolerance (``tol_direction =
+        max(safety_factor * error_estimate, estimate.diagnostics["tol"],
+        rtol * max(|value|, |expected|))``) when `atol` is not given --
+        one small, model-independent constant rather than a per-model
+        tolerance. Calibrated against a real ODE-based likelihood: every
+        direction's actual error there was already within 1x its own
+        reported error estimate, so `safety_factor=3` leaves comfortable
+        headroom without reintroducing per-model tuning. The engine's own
+        noise-derived `tol` is used as a floor because `error_estimate`
+        can legitimately come out as exactly 0 (the corroborating chains
+        and full ladder all agreeing to double precision by coincidence
+        for a genuinely smooth function) -- `safety_factor * 0` would
+        otherwise demand an unreachable exact match.
+    :param rtol: Relative-tolerance floor on top of
+        `safety_factor`/`estimate.diagnostics["tol"]` (see above),
+        following the symmetric relative-error convention (``Cs231n`` in
+        ``doc/references.bib``). Needed for directions whose parameter
+        barely perturbs the underlying computation (e.g. a pure
+        output-scaling factor that never enters an ODE's dynamics):
+        fiddy's own re-evaluation noise there is measured as spuriously
+        tiny, understating the real achievable agreement with an
+        *independently computed* `expected` (e.g. a solver's own
         analytic/adjoint sensitivity) -- which has its own, unrelated
         floating-point-accumulation floor that scales with the value's
         own magnitude, not with fiddy's self-consistency. Found on two
@@ -289,9 +292,9 @@ def check_gradient(
         and `~3.1e-12` relative error respectively while fiddy's other
         two tolerance terms were several orders of magnitude tighter than
         that gap. `rtol=1e-8` leaves roughly the same margin above that
-        measured floor as `k`'s own calibration story above, while
-        staying far tighter than would risk hiding a genuine small-
-        percentage sensitivity bug (e.g. an under-tightened solver
+        measured floor as `safety_factor`'s own calibration story above,
+        while staying far tighter than would risk hiding a genuine
+        small-percentage sensitivity bug (e.g. an under-tightened solver
         tolerance on the sensitivity equations specifically).
     :param noise_floor: See :func:`fiddy.estimate.estimate_gradient`.
     :param nondet_tol: See :func:`fiddy.estimate.estimate_gradient`.
@@ -393,16 +396,23 @@ def check_gradient(
         else [None] * len(estimates)
     )
 
-    # `k * error_estimate` alone is not a safe floor: `error_estimate` can
-    # legitimately come out as exactly 0 (the corroborating chains and
-    # full ladder all agreeing to double precision by coincidence),
-    # understating the FD engine's real achievable precision. Fall back to
-    # the engine's own noise-derived `tol` (`fiddy.estimate._default_tol`,
-    # already used for its own "converged" classification) as a floor for
-    # exactly this case -- see `_check_direction`.
+    # `safety_factor * error_estimate` alone is not a safe floor:
+    # `error_estimate` can legitimately come out as exactly 0 (the
+    # corroborating chains and full ladder all agreeing to double
+    # precision by coincidence), understating the FD engine's real
+    # achievable precision. Fall back to the engine's own noise-derived
+    # `tol` (`fiddy.estimate._default_tol`, already used for its own
+    # "converged" classification) as a floor for exactly this case --
+    # see `_check_direction`.
     direction_results = [
         _check_direction(
-            i, estimate, expectation, tol, k, rtol, direction_label=label
+            i,
+            estimate,
+            expectation,
+            atol,
+            safety_factor,
+            rtol,
+            direction_label=label,
         )
         for i, (estimate, expectation, label) in enumerate(
             zip(estimates, expected, labels, strict=True)
@@ -550,8 +560,8 @@ def check_jacobian(
     point: Type.POINT,
     expected: ArrayLike | dict[str, ArrayLike],
     directions: list[Type.DIRECTION] | None = None,
-    tol: float | None = None,
-    k: float = 3.0,
+    atol: float | None = None,
+    safety_factor: float = 3.0,
     rtol: float = 1e-8,
     noise_floor: float | None = None,
     nondet_tol: float = 0.0,
@@ -585,10 +595,10 @@ def check_jacobian(
         :func:`_flatten_expected_jacobian`.
     :param directions: Defaults to the standard basis (one direction per
         component of `point`), i.e. the full Jacobian.
-    :param tol: See :func:`check_gradient` -- applied identically to
+    :param atol: See :func:`check_gradient` -- applied identically to
         every (output, direction) pair.
-    :param k: See :func:`check_gradient` -- applied identically to every
-        (output, direction) pair.
+    :param safety_factor: See :func:`check_gradient` -- applied
+        identically to every (output, direction) pair.
     :param rtol: See :func:`check_gradient` -- applied identically to
         every (output, direction) pair.
     :param noise_floor: Forwarded to
@@ -662,7 +672,13 @@ def check_jacobian(
     for j, row in enumerate(jacobian.estimates):
         direction_results = [
             _check_direction(
-                i, estimate, expectation, tol, k, rtol, direction_label=label
+                i,
+                estimate,
+                expectation,
+                atol,
+                safety_factor,
+                rtol,
+                direction_label=label,
             )
             for i, (estimate, expectation, label) in enumerate(
                 zip(row, expected_flat[j], direction_label_list, strict=True)
