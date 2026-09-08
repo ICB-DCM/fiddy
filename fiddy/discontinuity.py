@@ -288,7 +288,7 @@ def check_cross_regime_disagreement(
     exists to catch). Using only `far_error` -- the far ladder's own,
     independent measure of how much *it* should be trusted -- avoids that
     circularity. `safety_factor=3.0` mirrors `fiddy.check.check_gradient`'s
-    own `k` convention (a multiplier turning an error *estimate* into a
+    own `safety_factor` convention (a multiplier turning an error *estimate* into a
     comparison tolerance), not `check_discontinuity`'s differently-scoped
     `safety_factor=10.0` (calibrated for a raw noise-floor/h term, not an
     already-safety-margined error estimate).

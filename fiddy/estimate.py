@@ -278,7 +278,7 @@ def _default_tol(effective_sigma: float | np.ndarray) -> float | np.ndarray:
     ODE-based likelihood: several genuinely well-resolved parameters
     (relative error ~1e-8) needed up to ~42x this base scaling to be
     classified "converged" rather than "noise_dominated"; 50x leaves some
-    margin. `fiddy.check.check_gradient`'s `k` parameter provides a
+    margin. `fiddy.check.check_gradient`'s `safety_factor` parameter provides a
     proper per-direction, auto-derived tolerance on top of this; this is
     only the engine's own internal, preliminary classification. Elementwise
     over `effective_sigma`, so a per-output-component noise floor produces

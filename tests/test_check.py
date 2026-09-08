@@ -57,7 +57,7 @@ def test_kink_is_inconclusive_not_failed():
 
 
 def test_tolerance_is_auto_derived_per_direction():
-    """Each direction's tolerance is `k * error_estimate`, floored at the
+    """Each direction's tolerance is `safety_factor * error_estimate`, floored at the
     engine's shared noise-derived `tol` -- so per-direction error
     estimates (which do vary with each direction's own scale) drive the
     tolerance whenever they exceed that shared floor, rather than one
