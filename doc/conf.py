@@ -1,6 +1,5 @@
 import os
 import sys
-from unittest import mock
 
 # Configuration file for the Sphinx documentation builder.
 #
@@ -33,12 +32,11 @@ author = "fiddy developers"
 extensions = [
     "sphinx.ext.autosummary",
     "sphinx.ext.autodoc",
-    #    "sphinx_autodoc_typehints",  # FIXME fails
+    "sphinx_autodoc_typehints",
     "sphinx.ext.intersphinx",
     "sphinx.ext.mathjax",
     "nbsphinx",
     "IPython.sphinxext.ipython_console_highlighting",
-    "recommonmark",
 ]
 
 intersphinx_mapping = {
@@ -48,9 +46,28 @@ intersphinx_mapping = {
 }
 
 # sphinx-autodoc-typehints
-typehints_fully_qualified = True
+typehints_fully_qualified = False
 typehints_document_rtype = True
-set_type_checking_flag = True
+
+# Keep fiddy's own `Type.*` annotation aliases (`fiddy/constants.py`)
+# rendered as-is, rather than resolved/expanded into numpy's private
+# generic-alias internals (e.g. `Type.POINT` -> `NDArray[float64]` ->
+# `numpy._typing._array_like.GenericAlias[...]`).
+autodoc_type_aliases = {
+    f"Type.{name}": f"Type.{name}"
+    for name in (
+        "SCALAR",
+        "ARRAY",
+        "DIRECTION",
+        "POINT",
+        "FUNCTION_OUTPUT",
+        "RAW_FUNCTION_OUTPUT",
+        "FUNCTION",
+        "SEED_LIKE",
+        "RNG_LIKE",
+        "BOUNDS",
+    )
+}
 
 # Add any paths that contain templates here, relative to this directory.
 templates_path = ["_templates"]

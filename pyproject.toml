@@ -43,15 +43,16 @@ Repository = "https://github.com/icb-dcm/fiddy"
 
 [project.optional-dependencies]
 doc = [
-    "docutils<0.19",
     "ipython",
-    "mock",
     "nbconvert",
     "nbsphinx",
-    "recommonmark>=0.7.1",
-    "sphinx<8",
+    # >=9.1: required by sphinx-autodoc-typehints>=3.
+    "sphinx>=9.1",
     "sphinx_rtd_theme",
-    "sphinx-autodoc-typehints",
+    # >=3: the first release clean of a `RemovedInSphinx10Warning` on
+    # Sphinx>=9 (verified directly); also the release that added
+    # Sphinx>=9.1 support at all.
+    "sphinx-autodoc-typehints>=3",
 ]
 examples = ["notebook", "scipy", "matplotlib"]
 tests = ["pytest", "scipy", "matplotlib"]
