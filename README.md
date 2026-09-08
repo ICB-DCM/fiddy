@@ -34,8 +34,10 @@ computed, not compared against something else:
 from fiddy import estimate_gradient
 import numpy as np
 
+
 def function(x):
     return np.sin(x[0]) * np.cos(x[1])
+
 
 results = estimate_gradient(function, np.array([0.6, -0.3]))
 gradient = np.array([r.value for r in results])
@@ -66,8 +68,10 @@ N outputs costs no more function evaluations than checking 1:
 from fiddy import check_jacobian
 import numpy as np
 
+
 def function(x):
     return {"a": x[0] ** 2 + x[1], "b": np.sin(x[0]) * x[1]}
+
 
 point = np.array([1.3, 0.6])
 # One row per output ("a", "b"), one column per direction (x[0], x[1]).
