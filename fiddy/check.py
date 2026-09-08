@@ -19,6 +19,7 @@ reporting layer on top.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from typing import Unpack
 
 import numpy as np
 import pandas as pd
@@ -28,6 +29,7 @@ from ._report import _get_printable_value, _wide_display
 from .constants import Type
 from .estimate import (
     DerivativeEstimate,
+    EstimateKwargs,
     JacobianEstimate,
     estimate_gradient,
     estimate_jacobian,
@@ -213,16 +215,8 @@ def check_gradient(
     atol: float | None = None,
     safety_factor: float = 3.0,
     rtol: float = 1e-8,
-    noise_floor: float | None = None,
-    nondet_tol: float = 0.0,
-    n_rungs: int = 8,
-    step_ratio: float = 2.0,
-    n_rungs_far: int = 4,
-    step_ratio_far: float = 10.0,
-    bounds: Type.BOUNDS | None = None,
-    noise_floor_strategy: str = "auto",
-    executor: Executor | None = None,
     direction_labels: list[str] | None = None,
+    **estimate_kwargs: Unpack[EstimateKwargs],
 ) -> GradientCheckResult:
     """Check a supplied gradient against a finite-difference estimate.
 
@@ -296,30 +290,9 @@ def check_gradient(
         while staying far tighter than would risk hiding a genuine
         small-percentage sensitivity bug (e.g. an under-tightened solver
         tolerance on the sensitivity equations specifically).
-    :param noise_floor: See :func:`fiddy.estimate.estimate_gradient`.
-    :param nondet_tol: See :func:`fiddy.estimate.estimate_gradient`.
-    :param n_rungs: See :func:`fiddy.estimate.estimate_gradient`.
-    :param step_ratio: See :func:`fiddy.estimate.estimate_gradient`.
-    :param n_rungs_far: See :func:`fiddy.estimate.estimate_gradient` --
-        an independently-anchored, much-smaller-scale "far" ladder,
-        always evaluated alongside the main one to catch a hidden
-        parameter-space discontinuity closer to the evaluation point than
-        the main ladder's own finest rung (see
-        :mod:`fiddy.discontinuity`'s module docstring).
-    :param step_ratio_far: See :func:`fiddy.estimate.estimate_gradient`.
-    :param bounds: Optional per-parameter valid domain -- e.g. a model's
-        declared parameter bounds -- that no probe or step is ever
-        allowed to step outside of; see
-        :func:`fiddy.step_size.clamp_step_to_bounds`. `None` (the
-        default) disables clamping entirely. `point` itself must already
-        satisfy `bounds`. Forwarded to :func:`fiddy.estimate.estimate_gradient`.
-    :param noise_floor_strategy: See :func:`fiddy.estimate.estimate_gradient`
-        -- `"auto"` (the default) transparently falls back to an
-        independent noise-floor probe per direction whenever the cheap
-        shared probe comes back unconfident (as it reliably does once a
-        parameter sits close to its own `bounds`), so supplying `bounds`
-        does not on its own require choosing a strategy here.
-    :param executor: See :func:`fiddy.estimate.estimate_gradient`.
+    :param estimate_kwargs: Forwarded to
+        :func:`fiddy.estimate.estimate_gradient`. See
+        :class:`fiddy.estimate.EstimateKwargs`.
     :return: The gradient check result.
     :raises ValueError: If both `directions` and `random_directions` are
         given, if `direction_labels` is given with `random_directions`, if
@@ -364,18 +337,7 @@ def check_gradient(
         expected = [float(np.dot(full_gradient, d)) for d in directions]
 
     estimates = estimate_gradient(
-        function,
-        point,
-        directions=directions,
-        noise_floor=noise_floor,
-        nondet_tol=nondet_tol,
-        n_rungs=n_rungs,
-        step_ratio=step_ratio,
-        n_rungs_far=n_rungs_far,
-        step_ratio_far=step_ratio_far,
-        bounds=bounds,
-        noise_floor_strategy=noise_floor_strategy,
-        executor=executor,
+        function, point, directions=directions, **estimate_kwargs
     )
     expected = np.atleast_1d(np.asarray(expected, dtype=float))
     if len(expected) != len(estimates):
@@ -563,17 +525,9 @@ def check_jacobian(
     atol: float | None = None,
     safety_factor: float = 3.0,
     rtol: float = 1e-8,
-    noise_floor: float | None = None,
-    nondet_tol: float = 0.0,
-    n_rungs: int = 8,
-    step_ratio: float = 2.0,
-    n_rungs_far: int = 4,
-    step_ratio_far: float = 10.0,
-    bounds: Type.BOUNDS | None = None,
-    noise_floor_strategy: str = "auto",
-    executor: Executor | None = None,
     direction_labels: list[str] | None = None,
     output_labels: list[str] | None = None,
+    **estimate_kwargs: Unpack[EstimateKwargs],
 ) -> JacobianCheckResult:
     """Check every output component of a bundled multi-output function at
     once -- e.g. a model's state/observable/likelihood sensitivities
@@ -601,23 +555,9 @@ def check_jacobian(
         identically to every (output, direction) pair.
     :param rtol: See :func:`check_gradient` -- applied identically to
         every (output, direction) pair.
-    :param noise_floor: Forwarded to
-        :func:`fiddy.estimate.estimate_jacobian`.
-    :param nondet_tol: Forwarded to
-        :func:`fiddy.estimate.estimate_jacobian`.
-    :param n_rungs: Forwarded to :func:`fiddy.estimate.estimate_jacobian`.
-    :param step_ratio: Forwarded to
-        :func:`fiddy.estimate.estimate_jacobian`.
-    :param n_rungs_far: See :func:`check_gradient`. Forwarded to
-        :func:`fiddy.estimate.estimate_jacobian`.
-    :param step_ratio_far: Forwarded to
-        :func:`fiddy.estimate.estimate_jacobian`.
-    :param bounds: See :func:`check_gradient`. Forwarded to
-        :func:`fiddy.estimate.estimate_jacobian`.
-    :param noise_floor_strategy: See :func:`check_gradient`. Forwarded to
-        :func:`fiddy.estimate.estimate_jacobian`.
-    :param executor: Forwarded to
-        :func:`fiddy.estimate.estimate_jacobian`.
+    :param estimate_kwargs: Forwarded to
+        :func:`fiddy.estimate.estimate_jacobian`. See
+        :class:`fiddy.estimate.EstimateKwargs`.
     :param direction_labels: See :func:`check_gradient` -- applied
         identically to every output's own directions.
     :param output_labels: Optional, purely cosmetic label per flat output
@@ -632,18 +572,7 @@ def check_jacobian(
         :func:`check_gradient`.
     """
     jacobian: JacobianEstimate = estimate_jacobian(
-        function,
-        point,
-        directions=directions,
-        noise_floor=noise_floor,
-        nondet_tol=nondet_tol,
-        n_rungs=n_rungs,
-        step_ratio=step_ratio,
-        n_rungs_far=n_rungs_far,
-        step_ratio_far=step_ratio_far,
-        bounds=bounds,
-        noise_floor_strategy=noise_floor_strategy,
-        executor=executor,
+        function, point, directions=directions, **estimate_kwargs
     )
     expected_flat = _flatten_expected_jacobian(
         expected, jacobian.schema, jacobian.n_outputs, jacobian.n_directions

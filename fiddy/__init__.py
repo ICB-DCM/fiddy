@@ -19,6 +19,7 @@ from .constants import *
 from .discontinuity import DiscontinuityCheck, check_discontinuity
 from .estimate import (
     DerivativeEstimate,
+    EstimateKwargs,
     JacobianEstimate,
     estimate_directional_derivative,
     estimate_gradient,
