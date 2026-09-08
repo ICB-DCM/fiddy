@@ -201,6 +201,66 @@ def test_report_mentions_failed_direction_id():
     assert "1" in message  # the failing direction's index
 
 
+def test_direction_labels_appear_alongside_not_instead_of_the_index():
+    """`direction_labels` is purely cosmetic -- the bare `direction_index`
+    must still be present (as the `.df`/report's own index), with the
+    label added as an extra column/annotation, never replacing it."""
+
+    def f(x):
+        return np.array([x[0] ** 2 + x[1] ** 2])
+
+    point = np.array([1.0, 1.0])
+    expected = [2.0, 100.0]  # second entry deliberately wrong
+
+    result = check_gradient(f, point, expected, direction_labels=["k1", "k2"])
+
+    assert list(result.df.index) == [0, 1]
+    assert list(result.df["direction_label"]) == ["k1", "k2"]
+
+    with pytest.raises(AssertionError) as error:
+        result.assert_success()
+    message = str(error.value)
+    assert "1" in message  # the index is still there
+    assert "k2" in message  # and so is the label
+
+
+def test_no_direction_labels_means_no_label_column():
+    """The `direction_label` column should not clutter the report for
+    callers who never supply labels."""
+
+    def f(x):
+        return np.array([x[0]])
+
+    result = check_gradient(f, np.array([1.0]), expected=[1.0])
+
+    assert "direction_label" not in result.df.columns
+
+
+def test_direction_labels_length_mismatch_raises():
+    def f(x):
+        return np.array([x[0] ** 2 + x[1] ** 2])
+
+    point = np.array([1.0, 1.0])
+    expected = [2.0, 2.0]
+
+    with pytest.raises(ValueError, match="direction_labels"):
+        check_gradient(f, point, expected, direction_labels=["only_one"])
+
+
+def test_direction_labels_incompatible_with_random_directions():
+    def f(x):
+        return np.array([x[0]])
+
+    with pytest.raises(ValueError, match="random_directions"):
+        check_gradient(
+            f,
+            np.array([1.0]),
+            expected=[1.0],
+            random_directions=3,
+            direction_labels=["k1"],
+        )
+
+
 def test_check_gradient_no_longer_crashes_on_raw_dict_function():
     """Regression test: previously, a raw (unwrapped) dict-returning
     function crashed with a TypeError, since `fiddy.output`'s bundling
@@ -326,6 +386,52 @@ def test_check_jacobian_wrong_shape_expected_raises():
 
     with pytest.raises(ValueError, match="shape"):
         check_jacobian(f, point, wrong_shape_expected)
+
+
+def test_check_jacobian_output_labels_appear_alongside_not_instead_of_the_index():
+    """`output_labels` is purely cosmetic -- the bare output index (as
+    used in `assert_success`'s "--- output N ---" headers) must still be
+    present, with the label added, never replacing it. `direction_labels`
+    is applied identically to every output's own directions."""
+
+    def f(x):
+        return {"a": np.array([x[0] ** 2]), "b": np.array([x[0] ** 3])}
+
+    point = np.array([2.0])
+    expected = {
+        "a": np.array([[999.0]]),  # deliberately wrong
+        "b": np.array([[3 * point[0] ** 2]]),
+    }
+
+    result = check_jacobian(
+        f,
+        point,
+        expected,
+        direction_labels=["k1"],
+        output_labels=["a[0]", "b[0]"],
+    )
+
+    assert not result.success
+    with pytest.raises(AssertionError) as error:
+        result.assert_success()
+    message = str(error.value)
+    assert "output 0" in message  # the index is still there
+    assert "a[0]" in message  # and so is the label
+    assert "k1" in message  # direction_labels forwarded too
+
+
+def test_check_jacobian_output_labels_length_mismatch_raises():
+    def f(x):
+        return {"a": np.array([x[0] ** 2]), "b": np.array([x[0] ** 3])}
+
+    point = np.array([2.0])
+    expected = {
+        "a": np.array([[2 * point[0]]]),
+        "b": np.array([[3 * point[0] ** 2]]),
+    }
+
+    with pytest.raises(ValueError, match="output_labels"):
+        check_jacobian(f, point, expected, output_labels=["only_one"])
 
 
 def test_bounds_prevent_a_domain_violation_that_would_otherwise_fail():

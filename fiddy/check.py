@@ -50,6 +50,7 @@ def _check_direction(
     tol: float | None,
     k: float,
     rtol: float,
+    direction_label: str | None = None,
 ) -> DirectionCheckResult:
     """Shared pass/fail/inconclusive logic for one (direction[, output])
     pair -- used by both :func:`check_gradient` and :func:`check_jacobian`
@@ -65,6 +66,8 @@ def _check_direction(
         `tol` is `None`.
     :param rtol: Relative-tolerance floor, used when `tol` is `None`; see
         :func:`check_gradient`.
+    :param direction_label: Optional, purely cosmetic label for this
+        direction -- see :func:`check_gradient`'s `direction_labels`.
     :return: The pass/fail/inconclusive result for this direction.
     """
     direction_tol = (
@@ -89,6 +92,7 @@ def _check_direction(
         tol=direction_tol,
         outcome=outcome,
         estimate=estimate,
+        direction_label=direction_label,
     )
 
 
@@ -111,6 +115,9 @@ class DirectionCheckResult:
     floors are expected, not bugs (``Cs231n`` in ``doc/references.bib``)."""
     estimate: DerivativeEstimate
     """The full underlying result, for diagnostics/plotting."""
+    direction_label: str | None = None
+    """Optional caller-supplied label for this direction (e.g. a
+    parameter ID), purely for reporting."""
 
 
 @dataclass
@@ -123,9 +130,14 @@ class GradientCheckResult:
 
     @property
     def df(self) -> pd.DataFrame:
+        """A summary table, one row per direction, indexed by
+        `direction_index`, the bare positional index; a `direction_label`
+        column is added alongside it only if at least one direction has
+        one."""
         rows = [
             {
                 "direction_index": r.direction_index,
+                "direction_label": r.direction_label,
                 "test": r.test,
                 "expectation": r.expectation,
                 "abs_diff": abs(r.test - r.expectation),
@@ -135,7 +147,10 @@ class GradientCheckResult:
             }
             for r in self.direction_results
         ]
-        return pd.DataFrame(rows).set_index("direction_index")
+        df = pd.DataFrame(rows).set_index("direction_index")
+        if df["direction_label"].isna().all():
+            df = df.drop(columns=["direction_label"])
+        return df
 
     def assert_success(self, always_print: bool = False) -> None:
         """Assert that this gradient check succeeded.
@@ -206,6 +221,7 @@ def check_gradient(
     bounds: Type.BOUNDS | None = None,
     noise_floor_strategy: str = "auto",
     executor: Executor | None = None,
+    direction_labels: list[str] | None = None,
 ) -> GradientCheckResult:
     """Check a supplied gradient against a finite-difference estimate.
 
@@ -220,6 +236,9 @@ def check_gradient(
         `random_directions` mode, the full gradient vector to project.
     :param directions: Defaults to the standard basis (one direction per
         component of `point`), i.e. checking the full gradient.
+    :param direction_labels: Optional, purely cosmetic label per direction
+        (e.g. a parameter ID), shown in reports. Must have one entry per
+        direction, in the same order, if given.
     :param random_directions: Optional cheap-check mode (inspired by
         `torch.autograd.gradcheck`'s `fast_mode` (``TorchGradcheck``) and
         `jax.test_util.check_grads`'s single-random-direction default
@@ -299,9 +318,10 @@ def check_gradient(
     :param executor: See :func:`fiddy.estimate.estimate_gradient`.
     :return: The gradient check result.
     :raises ValueError: If both `directions` and `random_directions` are
-        given, if `random_directions` is used with an `expected` that
-        isn't the full gradient vector, if `expected` doesn't have one
-        entry per direction, if `point` violates `bounds`, or if
+        given, if `direction_labels` is given with `random_directions`, if
+        `random_directions` is used with an `expected` that isn't the
+        full gradient vector, if `expected` or `direction_labels` doesn't
+        have one entry per direction, if `point` violates `bounds`, or if
         `noise_floor_strategy` is invalid.
     :raises fiddy.function.FunctionEvaluationError: If `function` raises
         an exception, or returns a non-finite (``NaN``/``inf``) value, at
@@ -318,6 +338,13 @@ def check_gradient(
         if directions is not None:
             raise ValueError(
                 "Specify only one of `directions` and `random_directions`."
+            )
+        if direction_labels is not None:
+            raise ValueError(
+                "`direction_labels` names specific directions, which "
+                "`random_directions` mode does not check (it projects "
+                "onto random directions instead) -- there is nothing "
+                "meaningful to label."
             )
         point_arr = np.asarray(point, dtype=float)
         full_gradient = np.atleast_1d(np.asarray(expected, dtype=float))
@@ -352,6 +379,18 @@ def check_gradient(
             f"`expected` has {len(expected)} entries but there are "
             f"{len(estimates)} directions to check."
         )
+    if direction_labels is not None and len(direction_labels) != len(
+        estimates
+    ):
+        raise ValueError(
+            f"`direction_labels` has {len(direction_labels)} entries but "
+            f"there are {len(estimates)} directions to check."
+        )
+    labels = (
+        direction_labels
+        if direction_labels is not None
+        else [None] * len(estimates)
+    )
 
     # `k * error_estimate` alone is not a safe floor: `error_estimate` can
     # legitimately come out as exactly 0 (the corroborating chains and
@@ -361,9 +400,11 @@ def check_gradient(
     # already used for its own "converged" classification) as a floor for
     # exactly this case -- see `_check_direction`.
     direction_results = [
-        _check_direction(i, estimate, expectation, tol, k, rtol)
-        for i, (estimate, expectation) in enumerate(
-            zip(estimates, expected, strict=True)
+        _check_direction(
+            i, estimate, expectation, tol, k, rtol, direction_label=label
+        )
+        for i, (estimate, expectation, label) in enumerate(
+            zip(estimates, expected, labels, strict=True)
         )
     ]
 
@@ -386,6 +427,9 @@ class JacobianCheckResult:
 
     output_results: list[GradientCheckResult]
     schema: OutputSchema | None = None
+    output_labels: list[str] | None = None
+    """Optional, purely cosmetic label per flat output component, shown
+    in :meth:`assert_success`'s report alongside its flat index."""
     success: bool = field(init=False)
 
     def __post_init__(self) -> None:
@@ -433,7 +477,13 @@ class JacobianCheckResult:
             try:
                 result.assert_success(always_print=always_print)
             except AssertionError as error:
-                failures.append(f"--- output {i} ---\n{error}")
+                label = self.output_labels[i] if self.output_labels else None
+                header = (
+                    f"--- output {i} ({label}) ---"
+                    if label is not None
+                    else f"--- output {i} ---"
+                )
+                failures.append(f"{header}\n{error}")
         if failures:
             raise AssertionError("\n\n".join(failures))
 
@@ -511,6 +561,8 @@ def check_jacobian(
     bounds: Type.BOUNDS | None = None,
     noise_floor_strategy: str = "auto",
     executor: Executor | None = None,
+    direction_labels: list[str] | None = None,
+    output_labels: list[str] | None = None,
 ) -> JacobianCheckResult:
     """Check every output component of a bundled multi-output function at
     once -- e.g. a model's state/observable/likelihood sensitivities
@@ -555,9 +607,16 @@ def check_jacobian(
         :func:`fiddy.estimate.estimate_jacobian`.
     :param executor: Forwarded to
         :func:`fiddy.estimate.estimate_jacobian`.
+    :param direction_labels: See :func:`check_gradient` -- applied
+        identically to every output's own directions.
+    :param output_labels: Optional, purely cosmetic label per flat output
+        component shown in :meth:`JacobianCheckResult.assert_success`'s report.
+        Must have one entry per output component (``jacobian.n_outputs``), in the
+        same flat order fiddy bundles outputs in (see :mod:`fiddy.output`).
     :return: The Jacobian check result.
-    :raises ValueError: If `point` violates `bounds`, or
-        `noise_floor_strategy` is invalid.
+    :raises ValueError: If `point` violates `bounds`, `noise_floor_strategy`
+        is invalid, or `direction_labels`/`output_labels` don't have one
+        entry per direction/output component.
     :raises fiddy.function.FunctionEvaluationError: See
         :func:`check_gradient`.
     """
@@ -578,13 +637,34 @@ def check_jacobian(
     expected_flat = _flatten_expected_jacobian(
         expected, jacobian.schema, jacobian.n_outputs, jacobian.n_directions
     )
+    if direction_labels is not None and len(direction_labels) != (
+        n_directions := jacobian.n_directions
+    ):
+        raise ValueError(
+            f"`direction_labels` has {len(direction_labels)} entries but "
+            f"there are {n_directions} directions to check."
+        )
+    if output_labels is not None and len(output_labels) != (
+        n_outputs := jacobian.n_outputs
+    ):
+        raise ValueError(
+            f"`output_labels` has {len(output_labels)} entries but there "
+            f"are {n_outputs} output components to check."
+        )
+    direction_label_list = (
+        direction_labels
+        if direction_labels is not None
+        else [None] * jacobian.n_directions
+    )
 
     output_results = []
     for j, row in enumerate(jacobian.estimates):
         direction_results = [
-            _check_direction(i, estimate, expectation, tol, k, rtol)
-            for i, (estimate, expectation) in enumerate(
-                zip(row, expected_flat[j], strict=True)
+            _check_direction(
+                i, estimate, expectation, tol, k, rtol, direction_label=label
+            )
+            for i, (estimate, expectation, label) in enumerate(
+                zip(row, expected_flat[j], direction_label_list, strict=True)
             )
         ]
         success = all(r.outcome != "failed" for r in direction_results)
@@ -595,5 +675,7 @@ def check_jacobian(
         )
 
     return JacobianCheckResult(
-        output_results=output_results, schema=jacobian.schema
+        output_results=output_results,
+        schema=jacobian.schema,
+        output_labels=output_labels,
     )
