@@ -72,6 +72,96 @@ def test_far_ladder_catches_a_kink_the_main_ladder_never_crosses():
     assert result.status == "discontinuity_suspected"
 
 
+def _make_one_sided_jump(threshold, jump=1.0, slope=1.0, curvature=0.1):
+    """A scalar function with a genuine discontinuity (a jump, not just a
+    kink) at `threshold` -- the same character as an SBML event trigger
+    changing a trajectory discontinuously. Otherwise smooth (quadratic) on
+    each side, so the *only* source of FD inconsistency near `threshold`
+    is the jump itself, not real higher-order curvature."""
+
+    def f(x):
+        xv = float(np.asarray(x, dtype=float).ravel()[0])
+        val = slope * xv + curvature * xv**2
+        if xv >= threshold:
+            val += jump
+        return np.array([val])
+
+    return f
+
+
+def test_kink_inside_far_ladder_range_is_flagged_not_noise_dominated():
+    """A discontinuity whose crossing distance falls *inside* the far
+    ladder's own range (unlike `test_far_ladder_catches_a_kink_the_main_
+    ladder_never_crosses`, where it sits entirely below the far ladder's
+    finest rung too) must be flagged, not reported "noise_dominated"."""
+    x0 = np.array([1.0])
+    direction = np.array([1.0])
+    # Sits inside the default far ladder's range but is not resolvable by
+    # the default main ladder either.
+    delta = 1e-7
+    f = _make_one_sided_jump(x0[0] + delta)
+
+    result = estimate_directional_derivative(f, x0, direction)
+
+    assert result.status == "discontinuity_suspected"
+    assert result.far_discontinuity is not None
+    assert result.far_discontinuity.suspected
+
+
+def test_noisy_far_ladder_without_a_kink_does_not_misfire():
+    """A genuinely noisy (kink-free) function's far ladder must not be
+    misread as a discontinuity merely because it is itself noise-dominated
+    at eps-anchored step sizes -- end-to-end counterpart to
+    `test_noise_dominated_far_ladder_widens_the_budget_instead_of_misfiring`
+    in `tests/test_discontinuity.py`."""
+
+    def f(x):
+        return np.array(
+            [np.sin(x[0]) + deterministic_noise(x[0], amplitude=1e-6)]
+        )
+
+    x0 = np.array([1.3])
+    direction = np.array([1.0])
+    true_derivative = math.cos(1.3)
+
+    result = estimate_directional_derivative(
+        f, x0, direction, noise_floor=1e-6
+    )
+
+    assert result.status != "discontinuity_suspected"
+    if result.status == "converged":
+        assert abs(result.value - true_derivative) < 1e-3
+
+
+def test_n_rungs_far_zero_disables_the_far_ladder():
+    """`n_rungs_far=0` opts out of the far ladder and its noise probe
+    entirely."""
+
+    call_count = 0
+
+    def f(x):
+        nonlocal call_count
+        call_count += 1
+        return np.array([np.sin(x[0])])
+
+    x0 = np.array([1.3])
+    direction = np.array([1.0])
+    n_rungs = 8
+
+    result = estimate_directional_derivative(
+        f, x0, direction, n_rungs=n_rungs, n_rungs_far=0
+    )
+
+    assert result.far_extrapolation is None
+    assert result.far_discontinuity is None
+    assert result.cross_regime is None
+    assert result.status == "converged"
+    # One shared noise-floor probe (15 points) + f(x0) + the main ladder's
+    # own 2*n_rungs perturbed evaluations only -- no far-ladder or
+    # far-noise-probe evaluations at all.
+    assert call_count == 15 + 1 + 2 * n_rungs
+
+
 def test_noisy_function_converges_within_tolerance():
     noise_amplitude = 1e-8
 
@@ -225,9 +315,16 @@ def test_estimate_gradient_shares_base_point_evaluation():
 
     # One shared noise-floor probe (15 points) + one shared f(x0) + each
     # direction's own 2*n_rungs main-ladder plus 2*n_rungs_far far-ladder
-    # perturbed evaluations -- not a separate f(x0) or noise probe per
-    # direction.
-    expected = 15 + 1 + len(directions) * 2 * (n_rungs + n_rungs_far)
+    # perturbed evaluations, plus each direction's own 15-point noise
+    # probe local to the far ladder's scale (see
+    # `estimate._far_noise_probe_points`) -- not a separate f(x0) or
+    # model-scale noise probe per direction.
+    n_far_noise_points = 15
+    expected = (
+        15
+        + 1
+        + len(directions) * (2 * (n_rungs + n_rungs_far) + n_far_noise_points)
+    )
     assert call_count == expected
 
 
@@ -319,9 +416,15 @@ def test_estimate_jacobian_shares_one_batch_regardless_of_output_count():
 
     # One shared noise-floor probe (15 points) + one direct f(x0) call
     # (also populates `.schema`) + each direction's own 2*n_rungs main-
-    # ladder plus 2*n_rungs_far far-ladder perturbed evaluations --
-    # independent of how many outputs "f" bundles.
-    expected = 15 + 1 + len(point) * 2 * (n_rungs + n_rungs_far)
+    # ladder plus 2*n_rungs_far far-ladder perturbed evaluations, plus
+    # each direction's own 15-point noise probe local to the far ladder's
+    # scale -- independent of how many outputs "f" bundles.
+    n_far_noise_points = 15
+    expected = (
+        15
+        + 1
+        + len(point) * (2 * (n_rungs + n_rungs_far) + n_far_noise_points)
+    )
     assert call_count == expected
 
 

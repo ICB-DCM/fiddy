@@ -38,7 +38,7 @@ multi-output function like any other.
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from typing import Any, TypedDict
 
 import numpy as np
@@ -137,6 +137,47 @@ def _validate_point_in_bounds(
             "step cannot be safely clamped to a domain the starting "
             "point itself is already outside of."
         )
+
+
+_FAR_NOISE_PROBE_POINTS = 15
+"""Number of probe points for `_far_noise_probe_points` -- matches
+`_estimate_noise_floors_per_direction`'s own `n_points`, no particular
+reason to differ."""
+
+
+def _far_noise_probe_points(
+    point: np.ndarray,
+    direction: np.ndarray,
+    far_ladder: np.ndarray,
+    bounds: Type.BOUNDS | None,
+) -> list[np.ndarray]:
+    """Probe points for a noise floor local to the far ladder's *own* step
+    scale -- its finest rung -- independent of `noise.sigma` (probed at
+    the main ladder's much coarser scale, e.g. ~1% of the point's
+    magnitude for the default shared probe).
+
+    `far_discontinuity`'s noise budget needs a noise estimate on the same
+    scale as the far ladder's own (tiny, eps-anchored) steps; reusing
+    `noise.sigma` there divides a much larger, model-scale estimate by a
+    tiny step size, producing a spuriously permissive budget that can mask
+    a genuine kink regardless of size. A kink closer than even this
+    probe's own span can still be misread as noise -- an intrinsic limit
+    of any local method, not one this fix eliminates.
+
+    :param point: The point to probe around.
+    :param direction: The direction to probe along.
+    :param far_ladder: The far ladder (decreasing step sizes) this probe
+        is calibrating a discontinuity budget for.
+    :param bounds: Optional per-parameter valid domain.
+    :return: `_FAR_NOISE_PROBE_POINTS` probe points, in order.
+    """
+    return _noise_floor_probe_points(
+        point,
+        direction,
+        float(far_ladder[-1]),
+        _FAR_NOISE_PROBE_POINTS,
+        bounds,
+    )
 
 
 def _estimate_noise_floors_per_direction(
@@ -252,12 +293,18 @@ class DerivativeEstimate:
     far_extrapolation: ExtrapolationResult | None = None
     """The independently-anchored "far" ladder's own extrapolation result
     (see :func:`fiddy.step_size.build_step_ladder`'s `noise_floor=
-    numpy.finfo(float).eps` use) -- `None` only if no far ladder was
-    supplied; every public entry point always supplies one."""
+    numpy.finfo(float).eps` use) -- `None` if `n_rungs_far=0` was passed
+    to the entry point that produced this estimate (disabling the far
+    ladder entirely); every public entry point supplies one by default
+    otherwise."""
     far_discontinuity: DiscontinuityCheck | None = None
-    """The far ladder's own adjacent-rung discontinuity check -- catches
-    an ordinary in-range kink on the far side too, independently of the
-    main ladder's own check."""
+    """The far ladder's own discontinuity check, scanned across every
+    adjacent rung pair (not just one) and calibrated against a noise floor
+    probed at the far ladder's own scale (see `_far_noise_probe_points`)
+    rather than `noise.sigma` -- catches a kink inside the far ladder's own
+    range, which can otherwise inflate `far_extrapolation.error_estimate`
+    enough to defeat `cross_regime`'s budget. `.suspected` feeds `status`
+    directly, same as `discontinuity.suspected`/`cross_regime.suspected`."""
     cross_regime: CrossRegimeCheck | None = None
     """Whether the main and far ladders' independently-obtained values
     agree -- see :func:`fiddy.discontinuity.check_cross_regime_disagreement`.
@@ -408,6 +455,7 @@ def _estimate_from_ladder(
     far_ladder: np.ndarray | None = None,
     far_f_plus: np.ndarray | None = None,
     far_f_minus: np.ndarray | None = None,
+    far_noise_sigma: float | np.ndarray | None = None,
 ) -> list[DerivativeEstimate]:
     """Shared analysis: given a ladder and its evaluations, produce one
     :class:`DerivativeEstimate` per output component. No function
@@ -455,6 +503,14 @@ def _estimate_from_ladder(
         `far_ladder` is given.
     :param far_f_minus: The far ladder's backward perturbed-point
         evaluations. Required if `far_ladder` is given.
+    :param far_noise_sigma: The noise level `far_discontinuity` should
+        treat `far_ladder` as calibrated to -- a noise floor probed at the
+        far ladder's own scale (:func:`_far_noise_probe_points`), *not*
+        `discontinuity_noise_sigma`/`noise.sigma` (the main ladder's
+        scale). Defaults to `discontinuity_noise_sigma` for callers that
+        don't supply one (e.g. tests exercising the base ladder logic in
+        isolation); every public entry point supplies a properly-scaled
+        value when `far_ladder` is given.
     :return: A list of length ``n_outputs`` (length 1 for the single-
         output entry points, which take element 0).
     """
@@ -494,6 +550,12 @@ def _estimate_from_ladder(
     far_discontinuity = None
     cross_regime = None
     if far_ladder is not None:
+        if far_noise_sigma is None:
+            far_noise_sigma = discontinuity_noise_sigma_arr
+        far_noise_sigma_arr = np.broadcast_to(
+            np.atleast_1d(far_noise_sigma), (n_outputs,)
+        ).astype(float)
+
         with np.errstate(divide="ignore", invalid="ignore"):
             far_central_values = (far_f_plus - far_f_minus) / (
                 2 * far_ladder[:, None]
@@ -509,9 +571,40 @@ def _estimate_from_ladder(
             far_ladder,
             far_gap_values,
             far_extrapolation.best_index,
-            noise_sigma=discontinuity_noise_sigma_arr,
+            noise_sigma=far_noise_sigma_arr,
             nondet_tol=nondet_tol,
         )
+        # `best_index` can land on a pair that never straddles a kink
+        # sitting elsewhere in the far ladder's range, so every
+        # adjacent-rung pair is scanned instead of just that one (cheap:
+        # pure post-hoc analysis of already-computed `far_gap_values`).
+        # Only `.suspected` is widened to "any pair"; the reported
+        # residual/noise_budget/best_index/reference_index stay anchored
+        # at the original `best_index` pair.
+        #
+        # `suspected` is recomputed as `|residual| > noise_budget` alone,
+        # dropping `check_discontinuity`'s extra `|gap_b| > noise_budget`
+        # requirement (`gap_b`: the finer rung's own measured gap): a real
+        # discontinuity typically corrupts the *coarser* rung of a pair
+        # while the finer one stays small and clean, so requiring `gap_b`
+        # itself to be large would drop exactly the pairs this scan needs
+        # to catch.
+        far_kink_suspected = np.zeros(n_outputs, dtype=bool)
+        for pair_index in range(1, len(far_ladder)):
+            pair_check = check_discontinuity(
+                far_ladder,
+                far_gap_values,
+                np.full(n_outputs, pair_index),
+                noise_sigma=far_noise_sigma_arr,
+                nondet_tol=nondet_tol,
+            )
+            far_kink_suspected |= np.abs(
+                np.atleast_1d(pair_check.residual)
+            ) > np.atleast_1d(pair_check.noise_budget)
+        far_discontinuity = replace(
+            far_discontinuity, suspected=far_kink_suspected
+        )
+
         cross_regime = check_cross_regime_disagreement(
             value_arr,
             np.atleast_1d(far_extrapolation.value),
@@ -554,18 +647,21 @@ def _estimate_from_ladder(
     converged_arr = (error_estimate_arr <= tol_arr) & (
         relative_error_arr <= default_rtol
     )
-    # Deliberately does NOT fold `far_discontinuity.suspected` in: the far
-    # ladder is often *itself* genuinely noise-dominated for a function
-    # whose real noise floor sits far above machine epsilon (its anchor),
-    # in which case its own adjacent-rung gap comparison will routinely
-    # look like a kink (wildly oscillating central differences) with no
-    # bearing on whether the *main* ladder's value is trustworthy -- the
-    # informative cross-check is `cross_regime` (whether the two ladders'
-    # independently-obtained *values* agree), not the far ladder's own
-    # internal consistency.
+    # `far_discontinuity.suspected` catches a case `cross_regime` alone
+    # cannot: a kink inside the far ladder's own rung range destabilizes
+    # the far ladder's extrapolation, inflating `far_extrapolation.
+    # error_estimate` -- and since `check_cross_regime_disagreement`'s
+    # budget is driven by that same error estimate, it can self-mask the
+    # disagreement it should be flagging. `far_discontinuity` -- comparing
+    # the far ladder's own adjacent rungs directly, not value-vs-value
+    # against the main ladder -- has no such circularity.
     suspected_arr = np.atleast_1d(discontinuity.suspected)
     if far_ladder is not None:
-        suspected_arr = suspected_arr | np.atleast_1d(cross_regime.suspected)
+        suspected_arr = (
+            suspected_arr
+            | np.atleast_1d(cross_regime.suspected)
+            | np.atleast_1d(far_discontinuity.suspected)
+        )
 
     results = []
     for j in range(n_outputs):
@@ -654,7 +750,8 @@ def estimate_directional_derivative(
     :param step_ratio: Forwarded to
         :func:`fiddy.step_size.build_step_ladder`.
     :param n_rungs_far: Number of rungs in a second, independently-
-        anchored "far" ladder, always evaluated and cross-checked against
+        anchored "far" ladder, always evaluated (along with its own noise
+        probe, see `_far_noise_probe_points`) and cross-checked against
         the main ladder's value (see :mod:`fiddy.discontinuity`'s module
         docstring, ``check_cross_regime_disagreement``) -- catches a
         hidden parameter-space discontinuity (e.g. an SBML event trigger)
@@ -669,16 +766,22 @@ def estimate_directional_derivative(
         :func:`fiddy.step_size.build_step_ladder`. 4 is the minimum
         :func:`fiddy.extrapolation.extrapolate_central_differences`
         accepts (so the far ladder gets its own error estimate and
-        internal discontinuity check "for free"). Always dispatched, at
-        a real, known extra cost (`2 * n_rungs_far` more evaluations per
-        direction) -- there is no cheap signal in the main ladder's own
-        data that could safely skip this (the entire nature of this
-        failure mode: the wrong branch is itself locally smooth, so
-        nothing about the main ladder's data hints anything is wrong).
-    :param step_ratio_far: Ratio between the far ladder's rungs. `10.0`
-        (vs. the main ladder's `2.0`) trades table resolution for reach:
-        the far ladder needs to get far below the main ladder's finest
-        rung, not finely resolve an extrapolation order.
+        internal discontinuity check "for free").
+
+        `0` disables the far ladder entirely: `far_extrapolation`/
+        `far_discontinuity`/`cross_regime` are then all `None`, `status`
+        can only come from `discontinuity` (the main ladder's own
+        adjacent-rung check), and the far ladder's evaluations are
+        skipped. Only disable this when that saving matters more than the
+        robustness it buys -- there is no cheap signal in the main
+        ladder's own data that could safely substitute for it (the wrong
+        branch is itself locally smooth, so nothing hints anything is
+        wrong).
+    :param step_ratio_far: Ratio between the far ladder's rungs (ignored
+        if `n_rungs_far=0`). `10.0` (vs. the main ladder's `2.0`) trades
+        table resolution for reach: the far ladder needs to get far below
+        the main ladder's finest rung, not finely resolve an extrapolation
+        order.
     :param bounds: Optional per-parameter valid domain, forwarded to both
         the noise-floor probe and :func:`fiddy.step_size.build_step_ladder`
         -- see :func:`fiddy.step_size.clamp_step_to_bounds`. `None` (the
@@ -689,12 +792,11 @@ def estimate_directional_derivative(
         only one direction here, `"per_direction"`/escalated `"auto"`
         probes along `direction` itself rather than the shared,
         all-ones default.
-    :param executor: How to dispatch the batch of
-        ``2 * (n_rungs + n_rungs_far) + 1`` ladder evaluations
-        (``f(x0)``, ``f(x0 +/- h)`` per main and far rung) -- e.g.
-        :class:`fiddy.executor.JoblibExecutor` to run them in parallel.
-        Defaults to :class:`fiddy.executor.SequentialExecutor`. Also
-        forwarded to noise-floor estimation (its own, separate probe
+    :param executor: How to dispatch the batch of ladder (and, unless
+        `n_rungs_far=0`, far-ladder and far-noise-probe) evaluations --
+        e.g. :class:`fiddy.executor.JoblibExecutor` to run them in
+        parallel. Defaults to :class:`fiddy.executor.SequentialExecutor`.
+        Also forwarded to noise-floor estimation (its own, separate probe
         batch). Every point needed is decided upfront and dispatched as a
         single batch per phase, so switching executors changes wall-clock
         time only, never the result.
@@ -741,36 +843,51 @@ def estimate_directional_derivative(
         step_ratio=step_ratio,
         bounds=bounds,
     )
-    far_ladder = build_step_ladder(
-        point,
-        direction,
-        np.finfo(float).eps,
-        n_rungs=n_rungs_far,
-        step_ratio=step_ratio_far,
-        bounds=bounds,
-    )
+    far_ladder = None
+    if n_rungs_far > 0:
+        far_ladder = build_step_ladder(
+            point,
+            direction,
+            np.finfo(float).eps,
+            n_rungs=n_rungs_far,
+            step_ratio=step_ratio_far,
+            bounds=bounds,
+        )
 
-    # Every point the whole ladder (main and far) needs is decided upfront
-    # and dispatched together as one batch through `executor` -- this is
-    # what makes parallelizing the ladder a matter of swapping the
-    # executor, not restructuring this function.
+    # Every point the whole ladder (main and, if enabled, far plus its own
+    # noise probe) needs is decided upfront and dispatched together as one
+    # batch through `executor` -- this is what makes parallelizing the
+    # ladder a matter of swapping the executor, not restructuring this
+    # function.
     n = len(ladder)
-    n_far = len(far_ladder)
     batch_points = (
         [point]
         + [point + h * direction for h in ladder]
         + [point - h * direction for h in ladder]
-        + [point + h * direction for h in far_ladder]
-        + [point - h * direction for h in far_ladder]
     )
+    n_far = 0
+    if far_ladder is not None:
+        n_far = len(far_ladder)
+        batch_points += [point + h * direction for h in far_ladder]
+        batch_points += [point - h * direction for h in far_ladder]
+        batch_points += _far_noise_probe_points(
+            point, direction, far_ladder, bounds
+        )
+
     batch_results = np.array(
         [np.asarray(v) for v in executor(function, batch_points)]
     ).reshape(len(batch_points), -1)[:, :1]
     f_0 = batch_results[0]
     f_plus = batch_results[1 : 1 + n]
     f_minus = batch_results[1 + n : 1 + 2 * n]
-    far_f_plus = batch_results[1 + 2 * n : 1 + 2 * n + n_far]
-    far_f_minus = batch_results[1 + 2 * n + n_far :]
+    far_f_plus = None
+    far_f_minus = None
+    far_noise_sigma = None
+    if far_ladder is not None:
+        far_f_plus = batch_results[1 + 2 * n : 1 + 2 * n + n_far]
+        far_f_minus = batch_results[1 + 2 * n + n_far : 1 + 2 * n + 2 * n_far]
+        far_noise_values = batch_results[1 + 2 * n + 2 * n_far :]
+        far_noise_sigma = _analyze_noise_table(far_noise_values, 3.0).sigma
 
     return _estimate_from_ladder(
         ladder,
@@ -783,6 +900,7 @@ def estimate_directional_derivative(
         far_ladder=far_ladder,
         far_f_plus=far_f_plus,
         far_f_minus=far_f_minus,
+        far_noise_sigma=far_noise_sigma,
     )[0]
 
 
@@ -906,29 +1024,35 @@ def estimate_gradient(
         )
         for i, d in enumerate(directions)
     ]
-    far_ladders = [
-        build_step_ladder(
-            point,
-            d,
-            np.finfo(float).eps,
-            n_rungs=n_rungs_far,
-            step_ratio=step_ratio_far,
-            bounds=bounds,
-        )
-        for d in directions
-    ]
+    far_ladders: list[np.ndarray | None] = [None] * len(directions)
+    if n_rungs_far > 0:
+        far_ladders = [
+            build_step_ladder(
+                point,
+                d,
+                np.finfo(float).eps,
+                n_rungs=n_rungs_far,
+                step_ratio=step_ratio_far,
+                bounds=bounds,
+            )
+            for d in directions
+        ]
 
     # f(x0) does not depend on direction, so it is evaluated once and
-    # shared across every direction's ladder (main and far), not once per
-    # direction.
+    # shared across every direction's ladder (main and, if enabled, far
+    # plus its own noise probe), not once per direction.
     batch_points = [point]
     for d, ladder, far_ladder in zip(
         directions, ladders, far_ladders, strict=True
     ):
         batch_points += [point + h * d for h in ladder]
         batch_points += [point - h * d for h in ladder]
-        batch_points += [point + h * d for h in far_ladder]
-        batch_points += [point - h * d for h in far_ladder]
+        if far_ladder is not None:
+            batch_points += [point + h * d for h in far_ladder]
+            batch_points += [point - h * d for h in far_ladder]
+            batch_points += _far_noise_probe_points(
+                point, d, far_ladder, bounds
+            )
 
     batch_results = np.array(
         [np.asarray(v) for v in executor(function, batch_points)]
@@ -941,13 +1065,22 @@ def estimate_gradient(
         zip(ladders, far_ladders, strict=True)
     ):
         n = len(ladder)
-        n_far = len(far_ladder)
         f_plus = batch_results[offset : offset + n]
         f_minus = batch_results[offset + n : offset + 2 * n]
         offset += 2 * n
-        far_f_plus = batch_results[offset : offset + n_far]
-        far_f_minus = batch_results[offset + n_far : offset + 2 * n_far]
-        offset += 2 * n_far
+        far_f_plus = None
+        far_f_minus = None
+        far_noise_sigma = None
+        if far_ladder is not None:
+            n_far = len(far_ladder)
+            far_f_plus = batch_results[offset : offset + n_far]
+            far_f_minus = batch_results[offset + n_far : offset + 2 * n_far]
+            offset += 2 * n_far
+            far_noise_values = batch_results[
+                offset : offset + _FAR_NOISE_PROBE_POINTS
+            ]
+            offset += _FAR_NOISE_PROBE_POINTS
+            far_noise_sigma = _analyze_noise_table(far_noise_values, 3.0).sigma
         results.append(
             _estimate_from_ladder(
                 ladder,
@@ -960,6 +1093,7 @@ def estimate_gradient(
                 far_ladder=far_ladder,
                 far_f_plus=far_f_plus,
                 far_f_minus=far_f_minus,
+                far_noise_sigma=far_noise_sigma,
             )[0]
         )
     return results
@@ -1178,17 +1312,19 @@ def estimate_jacobian(
         )
         for i, d in enumerate(directions)
     ]
-    far_ladders = [
-        build_step_ladder(
-            point,
-            d,
-            np.finfo(float).eps,
-            n_rungs=n_rungs_far,
-            step_ratio=step_ratio_far,
-            bounds=bounds,
-        )
-        for d in directions
-    ]
+    far_ladders: list[np.ndarray | None] = [None] * len(directions)
+    if n_rungs_far > 0:
+        far_ladders = [
+            build_step_ladder(
+                point,
+                d,
+                np.finfo(float).eps,
+                n_rungs=n_rungs_far,
+                step_ratio=step_ratio_far,
+                bounds=bounds,
+            )
+            for d in directions
+        ]
 
     batch_points = []
     for d, ladder, far_ladder in zip(
@@ -1196,8 +1332,12 @@ def estimate_jacobian(
     ):
         batch_points += [point + h * d for h in ladder]
         batch_points += [point - h * d for h in ladder]
-        batch_points += [point + h * d for h in far_ladder]
-        batch_points += [point - h * d for h in far_ladder]
+        if far_ladder is not None:
+            batch_points += [point + h * d for h in far_ladder]
+            batch_points += [point - h * d for h in far_ladder]
+            batch_points += _far_noise_probe_points(
+                point, d, far_ladder, bounds
+            )
 
     batch_results = np.array(
         [np.asarray(v) for v in executor(function, batch_points)]
@@ -1221,13 +1361,22 @@ def estimate_jacobian(
         zip(ladders, far_ladders, strict=True)
     ):
         n = len(ladder)
-        n_far = len(far_ladder)
         f_plus = batch_results[offset : offset + n]
         f_minus = batch_results[offset + n : offset + 2 * n]
         offset += 2 * n
-        far_f_plus = batch_results[offset : offset + n_far]
-        far_f_minus = batch_results[offset + n_far : offset + 2 * n_far]
-        offset += 2 * n_far
+        far_f_plus = None
+        far_f_minus = None
+        far_noise_sigma = None
+        if far_ladder is not None:
+            n_far = len(far_ladder)
+            far_f_plus = batch_results[offset : offset + n_far]
+            far_f_minus = batch_results[offset + n_far : offset + 2 * n_far]
+            offset += 2 * n_far
+            far_noise_values = batch_results[
+                offset : offset + _FAR_NOISE_PROBE_POINTS
+            ]
+            offset += _FAR_NOISE_PROBE_POINTS
+            far_noise_sigma = _analyze_noise_table(far_noise_values, 3.0).sigma
         per_direction.append(
             _estimate_from_ladder(
                 ladder,
@@ -1240,10 +1389,13 @@ def estimate_jacobian(
                 # Each output's own noise floor (`noises[i].sigma`,
                 # already the default), not the shared ladder-driving
                 # value -- see the docstring above for why sigma-sharing
-                # is no longer needed here.
+                # is no longer needed here. Likewise `far_noise_sigma`:
+                # per output component, not the shared ladder-driving
+                # value.
                 far_ladder=far_ladder,
                 far_f_plus=far_f_plus,
                 far_f_minus=far_f_minus,
+                far_noise_sigma=far_noise_sigma,
             )
         )
 
