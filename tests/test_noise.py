@@ -108,7 +108,7 @@ def test_bounds_can_crush_the_probe_step_to_zero():
     """A point sitting exactly at its own declared bound gives the probe
     zero room to perturb it -- `clamp_step_to_bounds` clamps the whole
     step to `0`, so every probe point evaluates identically and the
-    plateau-detection heuristic reports a degenerate `sigma=0.0`. This is
+    noise floor collapses to the rounding floor ``eps * |f|``. This is
     the mechanism `noise_floor_is_confident` exists to flag (see
     `fiddy.estimate`'s `noise_floor_strategy="auto"` escalation, added
     after this was found to silently corrupt otherwise-unrelated
@@ -121,9 +121,56 @@ def test_bounds_can_crush_the_probe_step_to_zero():
         lambda x: np.array([x[0] ** 2]), point, direction, bounds=bounds
     )
 
-    assert result.sigma == 0.0
+    assert result.sigma == np.finfo(float).eps
     assert result.confident is False
     assert not noise_floor_is_confident(result)
+
+
+def test_noise_floor_is_at_least_the_rounding_error():
+    """Noise of ~1 ulp, below eps * |f|, is reported as eps * |f|."""
+    rng = np.random.default_rng(0)
+    f0 = 1e3
+    jitter = rng.integers(-1, 2, size=15) * np.spacing(f0)
+    probe_values = f0 + jitter
+    values = iter(probe_values)
+    direction = np.array([1.0])
+
+    result = estimate_noise_floor(
+        lambda x: np.array([next(values)]), np.array([0.0]), direction
+    )
+
+    assert result.confident
+    assert result.sigma == np.finfo(float).eps * np.median(probe_values)
+    assert result.sigmas[result.level - 1] < result.sigma
+
+
+def test_rounding_floor_is_per_output_component():
+    noise_amplitude = 1e-6
+
+    def f(x):
+        return np.array(
+            [1e3 + deterministic_noise(x[0], noise_amplitude), 0.0, 3.0]
+        )
+
+    result = estimate_noise_floor(f, np.array([0.7]), np.array([1.0]))
+
+    # Noise well above the rounding floor is unaffected.
+    true_sigma = noise_amplitude / np.sqrt(3)
+    assert 0.1 * true_sigma < result.sigma[0] < 10 * true_sigma
+    # An exactly-zero component gets no floor.
+    assert result.sigma[1] == 0.0
+    # A constant component gets its own floor.
+    assert result.sigma[2] == np.finfo(float).eps * 3.0
+
+
+def test_rounding_floor_ignores_non_finite_probe_values():
+    values = iter([np.nan] + [1e3 + i * 1e-3 for i in range(14)])
+
+    result = estimate_noise_floor(
+        lambda x: np.array([next(values)]), np.array([0.0]), np.array([1.0])
+    )
+
+    assert np.isfinite(result.sigma)
 
 
 def test_noise_floor_is_confident_true_case():
