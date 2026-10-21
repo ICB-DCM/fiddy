@@ -44,7 +44,11 @@ noise-floor-only budget. Root cause:
 from a single generic probe direction across every parameter direction
 (a deliberate few-evaluations trade-off -- see its docstring), which can
 under-estimate the real per-direction noise for some models. See
-`curvature_rtol` below for the fix.
+`curvature_rtol` below for the fix. Independently of curvature, noise
+along a direction well above the noise floor makes random excursions of
+the gap curve exceed the budget; the estimators in :mod:`fiddy.estimate`
+therefore raise `noise_sigma` where the ladder's own evaluations show
+clearly larger noise.
 
 **A harder, distinct failure this module's own adjacent-rung comparison
 cannot see at all: the entire ladder sitting on the wrong side of a
@@ -113,6 +117,8 @@ class DiscontinuityCheck:
     residual: float | np.ndarray
     """``gap_values[best_index] - predicted_gap_b``."""
     noise_budget: float | np.ndarray
+    """The budget `residual` and ``gap_values[best_index]`` are compared
+    against, derived from `noise_sigma` (see :func:`check_discontinuity`)."""
 
 
 def check_discontinuity(
