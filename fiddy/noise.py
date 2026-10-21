@@ -22,6 +22,7 @@ default.
 from __future__ import annotations
 
 import math
+import warnings
 from dataclasses import dataclass, field
 
 import numpy as np
@@ -48,7 +49,9 @@ class NoiseFloor:
     outputs -- different bundled outputs (e.g. state trajectories vs. a
     likelihood) can have noise floors many orders of magnitude apart, so
     each gets its own estimate from the very same probe batch, at no
-    extra evaluation cost."""
+    extra evaluation cost. Estimated values are floored at the rounding
+    level (see :func:`estimate_noise_floor`), so `sigma` can exceed
+    every entry of `sigmas`."""
     level: int | None | np.ndarray
     """Finite-difference table order the estimate was taken at, or ``None``
     if no noise-dominated level was found (low-confidence fallback). For
@@ -65,6 +68,11 @@ class NoiseFloor:
     etc.). Kept for diagnostics/plotting (:func:`fiddy.plotting.
     plot_noise_floor`), not needed for the estimate itself. Each entry is
     an ``(n_outputs,)`` array for multi-output."""
+
+
+_ROUNDING_FLOOR_FACTOR = 1.0
+"""Lower bound on the noise floor, in units of ``eps * median|f|`` over the
+probe points (see `_analyze_noise_table`)."""
 
 
 def _noise_floor_probe_points(
@@ -173,6 +181,17 @@ def _analyze_noise_table(
     # falls back to machine epsilon.
     sigma[np.isnan(sigma)] = np.finfo(float).eps
 
+    # Conservative floor of a few ulps: covers rounding errors accumulated
+    # in typical computations, and the sampling error of the table estimate
+    # itself, which otherwise makes downstream budgets platform-dependent.
+    # Non-finite probe values are ignored here.
+    magnitude = np.where(np.isfinite(values), np.abs(values), np.nan)
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", RuntimeWarning)  # all-NaN columns
+        magnitude = np.nan_to_num(np.nanmedian(magnitude, axis=0), nan=0.0)
+    rounding_floor = _ROUNDING_FLOOR_FACTOR * np.finfo(float).eps * magnitude
+    sigma = np.maximum(sigma, rounding_floor)
+
     if n_outputs == 1:
         return NoiseFloor(
             sigma=float(sigma[0]),
@@ -213,6 +232,14 @@ def estimate_noise_floor(
     lowest order at which that rapid shrinkage stops -- i.e. the first
     ``k`` with ``sigma_level(k) / sigma_level(k+1) < plateau_ratio`` -- and
     reports the plateau value as the noise floor.
+
+    The estimate is never smaller than ``eps * median|f|`` over the probe
+    points, i.e. about two ulps of the function values. This conservative
+    floor covers rounding errors accumulated in typical computations and
+    the sampling error of the table estimate itself, which can otherwise
+    reach tens of percent and make the noise floor (and every step size
+    and tolerance derived from it) platform-dependent at the rounding
+    level.
 
     :param function: The blackbox function.
     :param point: The point to probe around.
@@ -265,14 +292,16 @@ def noise_floor_is_confident(noise: NoiseFloor) -> bool:
     :func:`fiddy.estimate.estimate_gradient`'s `noise_floor_strategy`).
 
     Checks both `noise.confident` (the plateau-detection heuristic's own
-    signal) and `noise.sigma` being nonzero: a bounds-clamped probe step
-    crushed down to (numerically) zero can make every probe point
-    evaluate to the same value, which the plateau-detection heuristic
-    can misread as a confident zero-noise plateau rather than "the probe
-    itself was too small to measure anything" -- found via a real,
-    bounds-constrained PEtab model (see
+    signal) and `noise.sigma` being nonzero. A bounds-clamped probe step
+    crushed down to (numerically) zero makes every probe point evaluate
+    to the same value: no plateau is found (`confident` is false), and
+    `sigma` is only the rounding floor, or zero for an all-zero output --
+    "the probe itself was too small to measure anything", found via a
+    real, bounds-constrained PEtab model (see
     :func:`fiddy.noise.default_probe_direction`'s own docstring for the
-    underlying shared-probe cross-contamination this guards against).
+    underlying shared-probe cross-contamination this guards against). A
+    `NoiseFloor` constructed directly can still be confident with zero
+    `sigma`, hence the second check.
 
     :param noise: The noise floor to check.
     :return: `True` iff every output component is confident and has a
