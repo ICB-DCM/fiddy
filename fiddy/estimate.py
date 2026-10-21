@@ -242,9 +242,11 @@ class DerivativeEstimate:
     """The estimate's own reported uncertainty."""
     status: str
     """One of "converged", "noise_dominated", "discontinuity_suspected",
-    "at_bound". "at_bound" means `bounds` left no room for a central
-    difference step in this direction (the point sits on a bound);
-    `value` and `error_estimate` are then NaN."""
+    "at_bound". "converged" means `error_estimate` is small in absolute
+    terms, not that `value` is distinguishable from zero (see `resolved`).
+    "at_bound" means `bounds` left no room for a central difference step
+    in this direction (the point sits on a bound); `value` and
+    `error_estimate` are then NaN."""
     noise: NoiseFloor
     """The noise floor the estimate was computed with."""
     extrapolation: ExtrapolationResult
@@ -274,6 +276,17 @@ class DerivativeEstimate:
     ``gap_values``, ``tol``, ``converged_threshold`` (the bound on
     `error_estimate` for "converged"), ``relative_error``, ``far_ladder``,
     ``far_central_values``), for plotting/debugging."""
+
+    @property
+    def resolved(self) -> bool:
+        """Whether `value` is clearly distinguishable from zero.
+
+        True if ``|value| > 2 * error_estimate``. A "converged" estimate of
+        a derivative that is zero or close to it is typically not resolved:
+        ``value +- error_estimate`` then bounds the derivative's magnitude,
+        but does not determine its sign or relative size.
+        """
+        return bool(abs(self.value) > 2 * self.error_estimate)
 
 
 def _default_tol(effective_sigma: float | np.ndarray) -> float | np.ndarray:
@@ -565,24 +578,15 @@ def _estimate_from_ladder(
     # gradient check's tolerance for such a direction then derives from
     # `error_estimate` rather than `tol` (see `fiddy.check`).
     #
-    # Signal check: is the error estimate small *compared to the value
-    # itself* at all? An absolute tolerance alone is not enough -- if the true
-    # derivative's magnitude happens to be near or below the noise-limited
-    # achievable precision (see the `fiddy.extrapolation` module docstring
-    # for a real case of this), `error_estimate` can be comfortably under
-    # `tol` while still being several times *larger* than the reported
-    # value, i.e. the value carries no real signal.
-    # `np.finfo(float).eps` is a pure divide-by-zero guard here, not a
-    # scale-setting choice -- it only matters when `value` itself is at
-    # (near-)machine-precision, in which case any nonzero error estimate
-    # correctly fails this check (an honest "can't resolve this" rather
-    # than a confident answer -- this is the intended behavior for
-    # near-zero-gradient directions, which are fundamentally
-    # indistinguishable from noise by finite differences alone).
+    # There is no requirement on `error_estimate` relative to `value`: for
+    # a derivative that is zero or close to it, ``value +- error_estimate``
+    # is still a precise statement (``|derivative| <~ error_estimate``),
+    # which is what a gradient check needs. Whether `value` is
+    # distinguishable from zero is reported separately
+    # (`DerivativeEstimate.resolved`).
     relative_error_arr = error_estimate_arr / np.maximum(
         np.abs(value_arr), np.finfo(float).eps
     )
-    max_relative_error = 0.5
     if tol_is_default:
         threshold_arr = np.maximum(
             _CONVERGED_TOL_FACTOR * tol_arr,
@@ -590,9 +594,7 @@ def _estimate_from_ladder(
         )
     else:
         threshold_arr = tol_arr
-    converged_arr = (error_estimate_arr <= threshold_arr) & (
-        relative_error_arr <= max_relative_error
-    )
+    converged_arr = error_estimate_arr <= threshold_arr
     # Deliberately does NOT fold `far_discontinuity.suspected` in: the far
     # ladder is often *itself* genuinely noise-dominated for a function
     # whose real noise floor sits far above machine epsilon (its anchor),
@@ -682,11 +684,10 @@ def estimate_directional_derivative(
     :param direction: The direction to estimate the derivative along.
     :param tol: Optional absolute-error tolerance; bypasses the default
         noise-derived tolerance. The estimate is classified "converged" if
-        its error estimate is at most `tol` and at most
-        ``0.5 * |value|``. The default tolerance is applied more loosely,
-        as ``max(3 * tol, 1e-6 * |value|)``, to allow for run-to-run
-        variation of the empirical noise floor and for the magnitude of
-        the derivative.
+        its error estimate is at most `tol`. The default tolerance is
+        applied more loosely, as ``max(3 * tol, 1e-6 * |value|)``, to allow
+        for run-to-run variation of the empirical noise floor and for the
+        magnitude of the derivative.
     :param noise_floor: Optional noise-floor hint (e.g. an ODE solver's
         own abstol); bypasses empirical noise estimation.
     :param nondet_tol: An expected magnitude of legitimate, non-noise
