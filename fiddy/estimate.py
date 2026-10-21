@@ -56,6 +56,7 @@ from .function import Function
 from .noise import (
     NoiseFloor,
     _analyze_noise_table,
+    _estimate_ladder_noise,
     _noise_floor_probe_points,
     estimate_model_noise_floor,
     noise_floor_is_confident,
@@ -275,7 +276,10 @@ class DerivativeEstimate:
     """Additional diagnostics (``f0`` (the function value at the point),
     ``ladder``, ``central_values``, ``gap_values``, ``tol``,
     ``converged_threshold`` (the bound on `error_estimate` for
-    "converged"), ``relative_error``, ``far_ladder``,
+    "converged"), ``ladder_sigma`` (the noise level along this direction
+    estimated from the ladder's own evaluations, or NaN; the kink check
+    uses it instead of the noise floor where it clearly exceeds the noise
+    floor), ``relative_error``, ``far_ladder``,
     ``far_central_values``), for plotting/debugging."""
 
     @property
@@ -321,6 +325,45 @@ def _default_tol(effective_sigma: float | np.ndarray) -> float | np.ndarray:
     :return: The tolerance, same shape as `effective_sigma`.
     """
     return 50 * np.maximum(effective_sigma, np.finfo(float).eps) ** (2 / 3)
+
+
+_LADDER_NOISE_GATE = 2.0
+"""Factor by which the ladder's own noise estimate must exceed the noise
+floor to be used in the kink check (see `_kink_check_sigma`)."""
+
+_LADDER_NOISE_CAP = 10.0
+"""Maximum factor by which the ladder's own noise estimate may raise the
+noise level used in the kink check (see `_kink_check_sigma`)."""
+
+
+def _kink_check_sigma(
+    noise_sigma: np.ndarray, ladder_sigma: np.ndarray
+) -> np.ndarray:
+    """The noise level for the kink check: the noise floor, raised to the
+    ladder's own noise estimate where that clearly exceeds it.
+
+    The noise floor is measured along a single probe direction and can
+    underestimate the noise along the direction at hand; random excursions
+    of the gap curve would then look like a kink. The ladder's own estimate
+    (`fiddy.noise._estimate_ladder_noise`) is noisy itself and is inflated
+    by features within the finest rungs, such as a jump or kink at a small
+    distance from the point; both would widen the budget and hide real
+    kinks. It is therefore only used where it exceeds `_LADDER_NOISE_GATE`
+    times the noise floor, and capped at `_LADDER_NOISE_CAP` times the
+    noise floor.
+
+    :param noise_sigma: The noise floor, per output component.
+    :param ladder_sigma: The ladder's own noise estimate, per output
+        component (NaN where unavailable).
+    :return: The noise level per output component.
+    """
+    with np.errstate(invalid="ignore"):
+        use_ladder = ladder_sigma > _LADDER_NOISE_GATE * noise_sigma
+    return np.where(
+        use_ladder,
+        np.minimum(ladder_sigma, _LADDER_NOISE_CAP * noise_sigma),
+        noise_sigma,
+    )
 
 
 _CONVERGED_TOL_FACTOR = 3.0
@@ -512,11 +555,14 @@ def _estimate_from_ladder(
 
     extrapolation = extrapolate_central_differences(ladder, central_values)
 
+    ladder_sigma = _estimate_ladder_noise(ladder, f_0, f_plus, f_minus)
     discontinuity = check_discontinuity(
         ladder,
         gap_values,
         extrapolation.best_index,
-        noise_sigma=discontinuity_noise_sigma_arr,
+        noise_sigma=_kink_check_sigma(
+            discontinuity_noise_sigma_arr, ladder_sigma
+        ),
         nondet_tol=nondet_tol,
     )
 
@@ -627,6 +673,7 @@ def _estimate_from_ladder(
             "gap_values": gap_values[:, j],
             "tol": float(tol_arr[j]),
             "converged_threshold": float(threshold_arr[j]),
+            "ladder_sigma": float(ladder_sigma[j]),
             "relative_error": float(relative_error_arr[j]),
         }
         if far_ladder is not None:
@@ -692,7 +739,9 @@ def estimate_directional_derivative(
         magnitude of the derivative.
     :param noise_floor: Optional noise-floor hint (e.g. an ODE solver's
         own abstol); bypasses empirical noise estimation, including its
-        rounding-level floor.
+        rounding-level floor. The kink check may still use a larger noise
+        level where the ladder's own evaluations show clearly larger noise
+        (``diagnostics["ladder_sigma"]``).
     :param nondet_tol: An expected magnitude of legitimate, non-noise
         value nondeterminism at the *same* point -- e.g. a simulator
         giving slightly different values with vs. without sensitivities

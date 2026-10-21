@@ -1,8 +1,10 @@
 import numpy as np
+import pytest
 from helpers import deterministic_noise
 
 from fiddy.noise import (
     NoiseFloor,
+    _estimate_ladder_noise,
     default_probe_direction,
     estimate_model_noise_floor,
     estimate_noise_floor,
@@ -204,3 +206,92 @@ def test_noise_floor_is_confident_multi_output_requires_all_confident():
             sigmas=[],
         )
     )
+
+
+def _ladder_evaluations(f, x0, ladder):
+    f_0 = np.array([f(x0)])
+    f_plus = np.array([[f(x0 + h)] for h in ladder])
+    f_minus = np.array([[f(x0 - h)] for h in ladder])
+    return f_0, f_plus, f_minus
+
+
+@pytest.mark.parametrize("step_ratio", [2.0, 3.0])
+def test_ladder_noise_cancels_curvature_and_a_kink_and_jump_at_the_point(
+    step_ratio,
+):
+    def f(x):
+        return np.exp(x) + 0.7 * abs(x - 0.3) + 2.0 * (x > 0.3)
+
+    ladder = 1e-2 / step_ratio ** np.arange(8)
+    sigma = _estimate_ladder_noise(
+        ladder, *_ladder_evaluations(f, 0.3, ladder)
+    )
+
+    # Only rounding errors remain.
+    assert sigma[0] < 1e-13
+
+
+@pytest.mark.parametrize("step_ratio", [2.0, 3.0])
+def test_ladder_noise_estimates_independent_noise(step_ratio):
+    noise_sigma = 1e-6
+    ladder = 1e-2 / step_ratio ** np.arange(8)
+    estimates = []
+    for seed in range(200):
+        rng = np.random.default_rng(seed)
+
+        def f(x, rng=rng):
+            return np.sin(x) + rng.normal(0, noise_sigma)
+
+        estimates.append(
+            _estimate_ladder_noise(
+                ladder, *_ladder_evaluations(f, 0.3, ladder)
+            )
+        )
+
+    assert 0.8 < np.median(estimates) / noise_sigma < 1.25
+
+
+def test_ladder_noise_is_per_output_component():
+    rng = np.random.default_rng(0)
+    noise_sigmas = np.array([1e-6, 1e-9])
+    ladder = 1e-2 / 2.0 ** np.arange(8)
+
+    def f(x):
+        return np.sin(x) + rng.normal(0, noise_sigmas)
+
+    f_0 = f(0.3)
+    f_plus = np.array([f(0.3 + h) for h in ladder])
+    f_minus = np.array([f(0.3 - h) for h in ladder])
+    sigma = _estimate_ladder_noise(ladder, f_0, f_plus, f_minus)
+
+    assert sigma.shape == (2,)
+    assert np.all(noise_sigmas / 3 < sigma)
+    assert np.all(sigma < 3 * noise_sigmas)
+
+
+@pytest.mark.parametrize(
+    "ladder",
+    [
+        1e-2 / 2.0 ** np.arange(5),
+        np.array([1e-2, 5e-3, 2.5e-3, 1e-3, 5e-4, 2.5e-4, 1.25e-4, 6.25e-5]),
+        np.zeros(8),
+    ],
+    ids=["too-few-rungs", "not-geometric", "at-bound"],
+)
+def test_ladder_noise_is_nan_without_a_usable_ladder(ladder):
+    def f(x):
+        return np.sin(x) + deterministic_noise(x, 1e-6)
+
+    sigma = _estimate_ladder_noise(
+        ladder, *_ladder_evaluations(f, 0.3, ladder)
+    )
+    assert np.isnan(sigma[0])
+
+
+@pytest.mark.parametrize("value", [np.nan, np.inf])
+def test_ladder_noise_is_nan_for_non_finite_values(value):
+    ladder = 1e-2 / 2.0 ** np.arange(8)
+    f_0, f_plus, f_minus = _ladder_evaluations(np.sin, 0.3, ladder)
+    f_plus[-1] = value
+
+    assert np.isnan(_estimate_ladder_noise(ladder, f_0, f_plus, f_minus)[0])

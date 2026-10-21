@@ -5,6 +5,7 @@ import pytest
 from helpers import deterministic_noise
 
 from fiddy.estimate import (
+    _kink_check_sigma,
     estimate_directional_derivative,
     estimate_gradient,
     estimate_jacobian,
@@ -671,3 +672,108 @@ def test_diagnostics_report_f0():
     jacobian = estimate_jacobian(f, np.array([0.7]))
     assert jacobian.estimates[0][0].diagnostics["f0"] == np.exp(0.7)
     assert jacobian.estimates[1][0].diagnostics["f0"] == np.sin(0.7)
+
+
+def _noisy_sine_under(x):
+    return np.array([np.sin(x[0]) + deterministic_noise(x[0], 1e-5)])
+
+
+def test_underestimated_noise_floor_does_not_suggest_a_kink(monkeypatch):
+    """Noise along the direction well above the noise floor in use (here:
+    a noise floor hint 10x too small) is estimated from the ladder itself,
+    so it does not make the kink check fire."""
+
+    def estimate():
+        return estimate_directional_derivative(
+            _noisy_sine_under,
+            np.array([0.3]),
+            np.array([1.0]),
+            noise_floor=1e-6,
+        )
+
+    result = estimate()
+    assert not result.discontinuity.suspected
+    assert result.diagnostics["ladder_sigma"] > 2e-6
+
+    # Without the ladder's own estimate, the kink check fires.
+    monkeypatch.setattr(
+        "fiddy.estimate._estimate_ladder_noise",
+        lambda ladder, f_0, f_plus, f_minus: np.full(len(f_0), np.nan),
+    )
+    assert estimate().discontinuity.suspected
+
+
+def test_kink_is_flagged_despite_underestimated_noise_floor():
+    def f(x):
+        return np.array(
+            [abs(x[0] - 0.3) + np.sin(x[0]) + deterministic_noise(x[0], 1e-5)]
+        )
+
+    result = estimate_directional_derivative(
+        f, np.array([0.3]), np.array([1.0]), noise_floor=1e-6
+    )
+    assert result.status == "discontinuity_suspected"
+    assert result.discontinuity.suspected
+
+
+def test_jump_near_the_point_is_flagged(monkeypatch):
+    """A jump between the ladder's rungs, close to the point, inflates the
+    ladder's own noise estimate in proportion to the jump; the cap keeps a
+    wide margin between the jump's residual and the noise budget."""
+
+    def f(x):
+        return np.array(
+            [
+                np.sin(x[0])
+                + 1e-2 * (x[0] < 0.3 - 5e-4)
+                + deterministic_noise(x[0], 1e-6)
+            ]
+        )
+
+    def margin():
+        result = estimate_directional_derivative(
+            f, np.array([0.3]), np.array([1.0]), noise_floor=1e-6
+        )
+        assert result.status == "discontinuity_suspected"
+        assert result.diagnostics["ladder_sigma"] > 100 * 1e-6
+        return abs(result.discontinuity.residual) / (
+            result.discontinuity.noise_budget
+        )
+
+    assert margin() > 10
+
+    monkeypatch.setattr("fiddy.estimate._LADDER_NOISE_CAP", np.inf)
+    assert margin() < 2
+
+
+@pytest.mark.parametrize(
+    "ladder_sigma, expected",
+    [
+        (np.nan, 1.0),  # no estimate
+        (1.5, 1.0),  # below the gate: noise floor
+        (4.0, 4.0),  # above the gate: ladder estimate
+        (50.0, 10.0),  # capped
+    ],
+)
+def test_kink_check_sigma(ladder_sigma, expected):
+    assert _kink_check_sigma(
+        np.array([1.0]), np.array([ladder_sigma])
+    ) == pytest.approx(expected)
+
+
+def test_ladder_sigma_is_per_output_component():
+    def f(x):
+        return np.array(
+            [
+                np.sin(x[0]) + deterministic_noise(x[0], 1e-5),
+                np.cos(x[0]) + deterministic_noise(x[0], 1e-10),
+            ]
+        )
+
+    jacobian = estimate_jacobian(f, np.array([0.3]))
+
+    ladder_sigmas = [
+        jacobian.estimates[i][0].diagnostics["ladder_sigma"] for i in (0, 1)
+    ]
+    assert 1e-6 < ladder_sigmas[0] < 1e-4
+    assert 1e-11 < ladder_sigmas[1] < 1e-9
