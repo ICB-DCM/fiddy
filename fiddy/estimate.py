@@ -241,7 +241,10 @@ class DerivativeEstimate:
     error_estimate: float
     """The estimate's own reported uncertainty."""
     status: str
-    """One of "converged", "noise_dominated", "discontinuity_suspected"."""
+    """One of "converged", "noise_dominated", "discontinuity_suspected",
+    "at_bound". "at_bound" means `bounds` left no room for a central
+    difference step in this direction (the point sits on a bound);
+    `value` and `error_estimate` are then NaN."""
     noise: NoiseFloor
     """The noise floor the estimate was computed with."""
     extrapolation: ExtrapolationResult
@@ -268,7 +271,8 @@ class DerivativeEstimate:
     within either ladder ever disagrees."""
     diagnostics: dict[str, Any] = field(default_factory=dict)
     """Additional diagnostics (``ladder``, ``central_values``,
-    ``gap_values``, ``tol``, ``relative_error``, ``far_ladder``,
+    ``gap_values``, ``tol``, ``converged_threshold`` (the bound on
+    `error_estimate` for "converged"), ``relative_error``, ``far_ladder``,
     ``far_central_values``), for plotting/debugging."""
 
 
@@ -289,8 +293,11 @@ def _default_tol(effective_sigma: float | np.ndarray) -> float | np.ndarray:
     ODE-based likelihood: several genuinely well-resolved parameters
     (relative error ~1e-8) needed up to ~42x this base scaling to be
     classified "converged" rather than "noise_dominated"; 50x leaves some
-    margin. `fiddy.check.check_gradient`'s `safety_factor` parameter provides a
-    proper per-direction, auto-derived tolerance on top of this; this is
+    margin. On top of that, the classification allows a factor
+    `_CONVERGED_TOL_FACTOR` for run-to-run variation of the noise floor
+    (see `_estimate_from_ladder`). `fiddy.check.check_gradient`'s
+    `safety_factor` parameter provides a proper per-direction,
+    auto-derived tolerance on top of this; this is
     only the engine's own internal, preliminary classification. Elementwise
     over `effective_sigma`, so a per-output-component noise floor produces
     a per-component tolerance.
@@ -300,6 +307,16 @@ def _default_tol(effective_sigma: float | np.ndarray) -> float | np.ndarray:
     :return: The tolerance, same shape as `effective_sigma`.
     """
     return 50 * np.maximum(effective_sigma, np.finfo(float).eps) ** (2 / 3)
+
+
+_CONVERGED_TOL_FACTOR = 3.0
+"""Multiplier on the noise-derived default `tol` in the "converged"
+classification (see `_estimate_from_ladder`)."""
+
+_CONVERGED_RTOL = 1e-6
+"""Relative error estimate below which a direction counts as converged
+regardless of the noise-derived default `tol` (see
+`_estimate_from_ladder`)."""
 
 
 def _noise_floor_component(noise: NoiseFloor, j: int) -> NoiseFloor:
@@ -404,6 +421,7 @@ def _estimate_from_ladder(
     noise: NoiseFloor,
     tol: float | np.ndarray,
     nondet_tol: float,
+    tol_is_default: bool,
     discontinuity_noise_sigma: float | np.ndarray | None = None,
     far_ladder: np.ndarray | None = None,
     far_f_plus: np.ndarray | None = None,
@@ -428,6 +446,9 @@ def _estimate_from_ladder(
     :param tol: A scalar (applied to every output) or a per-output-
         component array of shape ``(n_outputs,)``.
     :param nondet_tol: Forwarded to :func:`fiddy.discontinuity.check_discontinuity`.
+    :param tol_is_default: Whether `tol` is the noise-derived default
+        (:func:`_default_tol`) rather than user-supplied; only the default
+        is relaxed in the "converged" classification.
     :param discontinuity_noise_sigma: The noise level
         :func:`fiddy.discontinuity.check_discontinuity` should treat the
         shared `ladder` as calibrated to -- defaults to `noise.sigma`
@@ -466,14 +487,12 @@ def _estimate_from_ladder(
         np.atleast_1d(discontinuity_noise_sigma), (n_outputs,)
     ).astype(float)
 
+    # `ladder` collapses to an all-zero step if `clamp_step_to_bounds`
+    # finds no room to move because `point` sits exactly on its declared
+    # bound in this direction. The resulting NaNs are reported as
+    # "at_bound" below.
+    at_bound = bool(np.all(ladder == 0))
     with np.errstate(divide="ignore", invalid="ignore"):
-        # `ladder` can legitimately collapse to an all-zero step (e.g.
-        # `clamp_step_to_bounds` finds zero room to move at all because
-        # `point` sits exactly on its declared bound in this direction --
-        # see that function's own docstring). The resulting NaN/inf is
-        # the correct, honest outcome: `converged_arr`/`suspected_arr`
-        # below classify it as "noise_dominated" (comparisons against NaN
-        # are always False), not a bug to work around.
         central_values = (f_plus - f_minus) / (2 * ladder[:, None])
         gap_values = (f_plus - 2 * f_0[None, :] + f_minus) / ladder[:, None]
 
@@ -530,11 +549,24 @@ def _estimate_from_ladder(
         # (`suspected_arr` below), the same way `discontinuity.suspected`
         # already is, not into `error_estimate`/the tolerance check.
 
-    # Absolute check: has the extrapolation converged to within the
-    # noise-derived tolerance at all?
+    # Precision check: is the error estimate small enough for the value to
+    # be useful? This is a precision gate, not a test of whether
+    # `error_estimate` is honest. A user-supplied `tol` is used as is. The
+    # noise-derived default is relaxed in two ways:
+    # - by `_CONVERGED_TOL_FACTOR`: the empirical noise floor varies by up
+    #   to ~4x between repeated runs, i.e. ~2.5x in `tol ~ sigma**(2/3)`,
+    #   while `error_estimate` depends on it much less. Without the
+    #   factor, directions near `tol` flip status between runs.
+    # - by `_CONVERGED_RTOL * |value|`: `tol` does not scale with the
+    #   function (scaling `function` by `c` scales `value` and
+    #   `error_estimate` by `c`, but `tol` only by `c**(2/3)`), so
+    #   well-resolved large-magnitude directions would exceed it.
+    # In both cases, `error_estimate` may exceed the default `tol`; a
+    # gradient check's tolerance for such a direction then derives from
+    # `error_estimate` rather than `tol` (see `fiddy.check`).
     #
-    # Relative check: is the error estimate small *compared to the value
-    # itself*? An absolute tolerance alone is not enough -- if the true
+    # Signal check: is the error estimate small *compared to the value
+    # itself* at all? An absolute tolerance alone is not enough -- if the true
     # derivative's magnitude happens to be near or below the noise-limited
     # achievable precision (see the `fiddy.extrapolation` module docstring
     # for a real case of this), `error_estimate` can be comfortably under
@@ -550,9 +582,16 @@ def _estimate_from_ladder(
     relative_error_arr = error_estimate_arr / np.maximum(
         np.abs(value_arr), np.finfo(float).eps
     )
-    default_rtol = 0.5
-    converged_arr = (error_estimate_arr <= tol_arr) & (
-        relative_error_arr <= default_rtol
+    max_relative_error = 0.5
+    if tol_is_default:
+        threshold_arr = np.maximum(
+            _CONVERGED_TOL_FACTOR * tol_arr,
+            _CONVERGED_RTOL * np.abs(value_arr),
+        )
+    else:
+        threshold_arr = tol_arr
+    converged_arr = (error_estimate_arr <= threshold_arr) & (
+        relative_error_arr <= max_relative_error
     )
     # Deliberately does NOT fold `far_discontinuity.suspected` in: the far
     # ladder is often *itself* genuinely noise-dominated for a function
@@ -569,7 +608,9 @@ def _estimate_from_ladder(
 
     results = []
     for j in range(n_outputs):
-        if suspected_arr[j]:
+        if at_bound:
+            status = "at_bound"
+        elif suspected_arr[j]:
             status = "discontinuity_suspected"
         elif converged_arr[j]:
             status = "converged"
@@ -581,6 +622,7 @@ def _estimate_from_ladder(
             "central_values": central_values[:, j],
             "gap_values": gap_values[:, j],
             "tol": float(tol_arr[j]),
+            "converged_threshold": float(threshold_arr[j]),
             "relative_error": float(relative_error_arr[j]),
         }
         if far_ladder is not None:
@@ -638,8 +680,13 @@ def estimate_directional_derivative(
     :param function: The blackbox function.
     :param point: The point to estimate the derivative at.
     :param direction: The direction to estimate the derivative along.
-    :param tol: Optional absolute-error tolerance hint; bypasses the
-        default noise-derived tolerance.
+    :param tol: Optional absolute-error tolerance; bypasses the default
+        noise-derived tolerance. The estimate is classified "converged" if
+        its error estimate is at most `tol` and at most
+        ``0.5 * |value|``. The default tolerance is applied more loosely,
+        as ``max(3 * tol, 1e-6 * |value|)``, to allow for run-to-run
+        variation of the empirical noise floor and for the magnitude of
+        the derivative.
     :param noise_floor: Optional noise-floor hint (e.g. an ODE solver's
         own abstol); bypasses empirical noise estimation.
     :param nondet_tol: An expected magnitude of legitimate, non-noise
@@ -730,7 +777,8 @@ def estimate_directional_derivative(
     noise = _noise_floor_component(noise, 0)
     effective_sigma = max(noise.sigma, nondet_tol)
 
-    if tol is None:
+    tol_is_default = tol is None
+    if tol_is_default:
         tol = _default_tol(effective_sigma)
 
     ladder = build_step_ladder(
@@ -780,6 +828,7 @@ def estimate_directional_derivative(
         noise,
         tol,
         nondet_tol,
+        tol_is_default=tol_is_default,
         far_ladder=far_ladder,
         far_f_plus=far_f_plus,
         far_f_minus=far_f_minus,
@@ -957,6 +1006,7 @@ def estimate_gradient(
                 noises[i],
                 tols[i],
                 nondet_tol,
+                tol_is_default=tol is None,
                 far_ladder=far_ladder,
                 far_f_plus=far_f_plus,
                 far_f_minus=far_f_minus,
@@ -1093,9 +1143,9 @@ def estimate_jacobian(
     :param point: The point to estimate the Jacobian at.
     :param directions: Defaults to the standard basis (one direction per
         component of `point`), i.e. the full Jacobian.
-    :param tol: Optional absolute-error tolerance hint applied to every
-        output component; bypasses each component's own noise-derived
-        tolerance.
+    :param tol: See :func:`estimate_directional_derivative` -- applied
+        identically to every output component, bypassing each component's
+        own noise-derived tolerance.
     :param noise_floor: See :func:`estimate_directional_derivative` --
         applied identically to every direction and output component (if
         given, treated as already shared across every output).
@@ -1237,6 +1287,7 @@ def estimate_jacobian(
                 noises[i],
                 tol_arrs[i],
                 nondet_tol,
+                tol_is_default=tol is None,
                 # Each output's own noise floor (`noises[i].sigma`,
                 # already the default), not the shared ladder-driving
                 # value -- see the docstring above for why sigma-sharing

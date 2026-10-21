@@ -73,8 +73,8 @@ def neville_extrapolate(xs: np.ndarray, ys: np.ndarray) -> np.ndarray:
         # collapsed to an all-zero step (a bounds-clamped direction with
         # zero room to step at all -- see
         # `fiddy.step_size.clamp_step_to_bounds`'s docstring). The
-        # resulting NaN correctly propagates to an unresolved
-        # ("noise_dominated") direction downstream, not a bug.
+        # resulting NaN correctly propagates to an "at_bound" direction
+        # downstream, not a bug.
         for j in range(1, n):
             for i in range(j, n):
                 q[i, j] = (
