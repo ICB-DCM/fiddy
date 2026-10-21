@@ -67,6 +67,11 @@ class NoiseFloor:
     an ``(n_outputs,)`` array for multi-output."""
 
 
+_ROUNDING_FLOOR_FACTOR = 1.0
+"""Lower bound on the noise floor, in units of ``eps * max|f|`` over the
+probe points (see `_analyze_noise_table`)."""
+
+
 def _noise_floor_probe_points(
     point: Type.POINT,
     direction: Type.DIRECTION,
@@ -173,6 +178,16 @@ def _analyze_noise_table(
     # falls back to machine epsilon.
     sigma[np.isnan(sigma)] = np.finfo(float).eps
 
+    # A computed value of magnitude |f| carries rounding error of order
+    # eps * |f|. Rounding errors at nearby points can be correlated, so the
+    # difference table can underestimate them; never report less.
+    rounding_floor = (
+        _ROUNDING_FLOOR_FACTOR
+        * np.finfo(float).eps
+        * np.max(np.abs(values), axis=0)
+    )
+    sigma = np.maximum(sigma, rounding_floor)
+
     if n_outputs == 1:
         return NoiseFloor(
             sigma=float(sigma[0]),
@@ -213,6 +228,12 @@ def estimate_noise_floor(
     lowest order at which that rapid shrinkage stops -- i.e. the first
     ``k`` with ``sigma_level(k) / sigma_level(k+1) < plateau_ratio`` -- and
     reports the plateau value as the noise floor.
+
+    The estimate is never smaller than the rounding error of the function
+    values themselves, ``eps * max|f|`` over the probe points: a function
+    evaluated in floating point cannot be less noisy than that, but its
+    rounding errors at nearby points can be correlated, which makes the
+    difference table underestimate them.
 
     :param function: The blackbox function.
     :param point: The point to probe around.

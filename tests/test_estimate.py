@@ -402,8 +402,8 @@ def _bound_crushed_shared_probe_setup():
     upper bound, giving it zero room in the direction the shared probe
     would perturb it -- `fiddy.step_size.clamp_step_to_bounds` then
     clamps the *whole* shared step to `0`, so every probe point evaluates
-    identically and the plateau-detection heuristic reports a spuriously
-    confident-looking `sigma=0.0` (see `fiddy.noise.noise_floor_is_confident`).
+    identically and the noise floor collapses to the rounding floor of
+    `f` (see `fiddy.noise.noise_floor_is_confident`).
     `x[0]` is a large-magnitude dummy component (drives the shared probe's
     step size via the dot product with the all-ones direction, but does
     not otherwise affect `f`); only `x[1]`'s own direction is checked --
@@ -434,8 +434,7 @@ def test_shared_noise_floor_strategy_can_be_crushed_by_an_unrelated_bound():
     to fix: with the (still-available, opt-in) `"shared"` strategy, a
     single unrelated component sitting at its own bound crushes the
     noise floor for *every* direction, including this well-behaved one --
-    turning a resolvable derivative into a falsely `"noise_dominated"`
-    result."""
+    turning a resolvable derivative into a falsely non-converged result."""
     f, point, bounds, directions = _bound_crushed_shared_probe_setup()
     result = estimate_gradient(
         f,
@@ -444,7 +443,7 @@ def test_shared_noise_floor_strategy_can_be_crushed_by_an_unrelated_bound():
         bounds=bounds,
         noise_floor_strategy="shared",
     )[0]
-    assert result.status == "noise_dominated"
+    assert result.status != "converged"
 
 
 def test_auto_noise_floor_strategy_escalates_when_shared_is_crushed():
@@ -655,3 +654,12 @@ def test_large_relative_error_is_not_converged_despite_large_tol(monkeypatch):
     assert result.error_estimate <= 3.0
     assert result.error_estimate > 0.5 * abs(result.value)
     assert result.status == "noise_dominated"
+
+
+def test_diagnostics_report_f0():
+    def f(x):
+        return np.array([np.exp(x[0]), np.sin(x[0])])
+
+    jacobian = estimate_jacobian(f, np.array([0.7]))
+    assert jacobian.estimates[0][0].diagnostics["f0"] == math.exp(0.7)
+    assert jacobian.estimates[1][0].diagnostics["f0"] == math.sin(0.7)
