@@ -44,7 +44,11 @@ noise-floor-only budget. Root cause:
 from a single generic probe direction across every parameter direction
 (a deliberate few-evaluations trade-off -- see its docstring), which can
 under-estimate the real per-direction noise for some models. See
-`curvature_rtol` below for the fix.
+`curvature_rtol` below for the fix. Independently of curvature, noise
+along a direction well above the noise floor makes random excursions of
+the gap curve exceed the budget; the estimators in :mod:`fiddy.estimate`
+therefore pass the larger of the noise floor and
+:func:`fiddy.noise.estimate_ladder_noise` as `noise_sigma`.
 
 **A harder, distinct failure this module's own adjacent-rung comparison
 cannot see at all: the entire ladder sitting on the wrong side of a

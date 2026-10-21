@@ -1,9 +1,11 @@
 import numpy as np
+import pytest
 from helpers import deterministic_noise
 
 from fiddy.noise import (
     NoiseFloor,
     default_probe_direction,
+    estimate_ladder_noise,
     estimate_model_noise_floor,
     estimate_noise_floor,
     noise_floor_is_confident,
@@ -204,3 +206,67 @@ def test_noise_floor_is_confident_multi_output_requires_all_confident():
             sigmas=[],
         )
     )
+
+
+def _ladder_evaluations(f, x0, ladder):
+    f_0 = np.array([f(x0)])
+    f_plus = np.array([[f(x0 + h)] for h in ladder])
+    f_minus = np.array([[f(x0 - h)] for h in ladder])
+    return f_0, f_plus, f_minus
+
+
+@pytest.mark.parametrize("step_ratio", [2.0, 3.0])
+def test_ladder_noise_ignores_curvature_kinks_and_jumps_at_the_point(
+    step_ratio,
+):
+    def f(x):
+        # smooth + kink at 0.3 + jump at 0.3
+        return np.exp(x) + 0.7 * abs(x - 0.3) + 2.0 * (x > 0.3)
+
+    ladder = 1e-2 / step_ratio ** np.arange(8)
+    sigma = estimate_ladder_noise(ladder, *_ladder_evaluations(f, 0.3, ladder))
+
+    # Only rounding errors remain.
+    assert sigma[0] < 1e-13
+
+
+def test_ladder_noise_estimates_independent_noise():
+    noise_sigma = 1e-6
+    ladder = 1e-2 / 2.0 ** np.arange(8)
+    estimates = []
+    for seed in range(200):
+        rng = np.random.default_rng(seed)
+
+        def f(x, rng=rng):
+            return np.sin(x) + rng.normal(0, noise_sigma)
+
+        estimates.append(
+            estimate_ladder_noise(ladder, *_ladder_evaluations(f, 0.3, ladder))
+        )
+
+    assert 0.8 < np.median(estimates) / noise_sigma < 1.25
+
+
+@pytest.mark.parametrize(
+    "ladder",
+    [
+        np.array([1e-2, 5e-3, 2.5e-3]),
+        np.array([1e-2, 5e-3, 2.5e-3, 1e-3]),
+        np.zeros(8),
+    ],
+    ids=["too-few-rungs", "not-geometric", "at-bound"],
+)
+def test_ladder_noise_is_zero_without_a_usable_ladder(ladder):
+    def f(x):
+        return np.sin(x) + deterministic_noise(x, 1e-6)
+
+    sigma = estimate_ladder_noise(ladder, *_ladder_evaluations(f, 0.3, ladder))
+    assert sigma[0] == 0.0
+
+
+def test_ladder_noise_is_zero_for_non_finite_values():
+    ladder = 1e-2 / 2.0 ** np.arange(8)
+    f_0, f_plus, f_minus = _ladder_evaluations(np.sin, 0.3, ladder)
+    f_plus[-1] = np.nan
+
+    assert estimate_ladder_noise(ladder, f_0, f_plus, f_minus)[0] == 0.0

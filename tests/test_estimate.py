@@ -665,3 +665,45 @@ def test_diagnostics_report_f0():
     jacobian = estimate_jacobian(f, np.array([0.7]))
     assert jacobian.estimates[0][0].diagnostics["f0"] == np.exp(0.7)
     assert jacobian.estimates[1][0].diagnostics["f0"] == np.sin(0.7)
+
+
+def _noisy_sine_under(x):
+    return np.array([np.sin(x[0]) + deterministic_noise(x[0], 1e-5)])
+
+
+def test_underestimated_noise_floor_does_not_suggest_a_kink(monkeypatch):
+    """Noise along the direction well above the noise floor in use (here:
+    a noise floor hint 10x too small) is estimated from the ladder itself,
+    so it does not make the kink check fire."""
+
+    def estimate():
+        return estimate_directional_derivative(
+            _noisy_sine_under,
+            np.array([0.3]),
+            np.array([1.0]),
+            noise_floor=1e-6,
+        )
+
+    result = estimate()
+    assert not result.discontinuity.suspected
+    assert result.diagnostics["ladder_sigma"] > 1e-6
+
+    # Without the ladder's own estimate, the kink check fires.
+    monkeypatch.setattr(
+        "fiddy.estimate.estimate_ladder_noise",
+        lambda ladder, f_0, f_plus, f_minus: np.zeros(len(f_0)),
+    )
+    assert estimate().discontinuity.suspected
+
+
+def test_kink_is_flagged_despite_underestimated_noise_floor():
+    def f(x):
+        return np.array(
+            [abs(x[0] - 0.3) + np.sin(x[0]) + deterministic_noise(x[0], 1e-5)]
+        )
+
+    result = estimate_directional_derivative(
+        f, np.array([0.3]), np.array([1.0]), noise_floor=1e-6
+    )
+    assert result.status == "discontinuity_suspected"
+    assert result.discontinuity.suspected

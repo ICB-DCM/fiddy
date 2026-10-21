@@ -57,6 +57,7 @@ from .noise import (
     NoiseFloor,
     _analyze_noise_table,
     _noise_floor_probe_points,
+    estimate_ladder_noise,
     estimate_model_noise_floor,
     noise_floor_is_confident,
 )
@@ -273,8 +274,11 @@ class DerivativeEstimate:
     """Additional diagnostics (``f0`` (the function value at the point),
     ``ladder``, ``central_values``, ``gap_values``, ``tol``,
     ``converged_threshold`` (the bound on `error_estimate` for
-    "converged"), ``relative_error``, ``far_ladder``,
-    ``far_central_values``), for plotting/debugging."""
+    "converged"), ``ladder_sigma`` (the noise level along this direction
+    estimated from the ladder's own evaluations, see
+    :func:`fiddy.noise.estimate_ladder_noise`; the kink check uses the
+    larger of this and the noise floor), ``relative_error``,
+    ``far_ladder``, ``far_central_values``), for plotting/debugging."""
 
 
 def _default_tol(effective_sigma: float | np.ndarray) -> float | np.ndarray:
@@ -499,11 +503,15 @@ def _estimate_from_ladder(
 
     extrapolation = extrapolate_central_differences(ladder, central_values)
 
+    # The noise along this direction can exceed the noise floor, which is
+    # measured along a single probe direction; random excursions of the
+    # gap curve would then look like a kink.
+    ladder_sigma = estimate_ladder_noise(ladder, f_0, f_plus, f_minus)
     discontinuity = check_discontinuity(
         ladder,
         gap_values,
         extrapolation.best_index,
-        noise_sigma=discontinuity_noise_sigma_arr,
+        noise_sigma=np.maximum(discontinuity_noise_sigma_arr, ladder_sigma),
         nondet_tol=nondet_tol,
     )
 
@@ -625,6 +633,7 @@ def _estimate_from_ladder(
             "gap_values": gap_values[:, j],
             "tol": float(tol_arr[j]),
             "converged_threshold": float(threshold_arr[j]),
+            "ladder_sigma": float(ladder_sigma[j]),
             "relative_error": float(relative_error_arr[j]),
         }
         if far_ladder is not None:

@@ -36,6 +36,7 @@ __all__ = [
     "default_probe_direction",
     "estimate_noise_floor",
     "estimate_model_noise_floor",
+    "estimate_ladder_noise",
     "noise_floor_is_confident",
 ]
 
@@ -378,3 +379,88 @@ def estimate_model_noise_floor(
     """
     direction = default_probe_direction(point)
     return estimate_noise_floor(function, point, direction, **kwargs)
+
+
+_LADDER_NOISE_WINDOWS = (2, 3)
+"""Number of finest windows of second and first differences, respectively,
+used by `estimate_ladder_noise`."""
+
+
+def _annihilating_weights(step_ratio: float, powers: tuple[int, ...]):
+    """Weights ``w`` with ``sum_j w[j] * h[k + j]**p == 0`` for every ``p`` in
+    `powers`, on a geometric ladder ``h[k + 1] = h[k] / step_ratio``.
+
+    These are the coefficients of ``prod_p (1 - step_ratio**p * z)``.
+    """
+    weights = np.array([1.0])
+    for p in powers:
+        weights = np.convolve(weights, [1.0, -(step_ratio**p)])
+    return weights
+
+
+def estimate_ladder_noise(
+    ladder: np.ndarray,
+    f_0: np.ndarray,
+    f_plus: np.ndarray,
+    f_minus: np.ndarray,
+) -> np.ndarray:
+    """Estimate the noise level along a direction from evaluations on a
+    step-size ladder.
+
+    Complements the noise floor from :func:`estimate_noise_floor`, which
+    is measured along a single probe direction and can underestimate the
+    noise along other directions.
+
+    Uses the second differences ``s_k = f(x + h_k) - 2 f(x) + f(x - h_k)``
+    and the first differences ``d_k = f(x + h_k) - f(x - h_k)``. Over a few
+    consecutive rungs of a geometric ladder, fixed linear combinations
+    cancel the terms of ``s_k`` that are constant (a jump), proportional to
+    ``h`` (a kink at `x`) or to ``h**2`` (curvature), and the terms of
+    ``d_k`` that are constant, proportional to ``h`` (the slope) or to
+    ``h**3``, so that only noise remains (the noise in ``f(x)`` cancels as
+    well). The estimate is the median absolute value of these combinations
+    over the finest rungs, scaled to the standard deviation of independent
+    Gaussian noise. Coarse rungs are not used, as there, higher-order terms
+    and kinks or jumps at a distance from `x` would inflate the estimate.
+
+    :param ladder: Step sizes, decreasing by a constant ratio.
+    :param f_0: Function values at the point, shape ``(n_outputs,)``.
+    :param f_plus: Function values at ``x + ladder[k] * direction``, shape
+        ``(len(ladder), n_outputs)``.
+    :param f_minus: Function values at ``x - ladder[k] * direction``, same
+        shape as `f_plus`.
+    :return: The estimated noise standard deviation per output component,
+        shape ``(n_outputs,)``. 0 where it cannot be estimated (fewer than
+        4 rungs, a ladder that is not geometric, or non-finite values).
+    """
+    ladder = np.asarray(ladder, dtype=float)
+    n_rungs = len(ladder)
+    f_plus = np.asarray(f_plus, dtype=float).reshape(n_rungs, -1)
+    f_minus = np.asarray(f_minus, dtype=float).reshape(n_rungs, -1)
+    f_0 = np.asarray(f_0, dtype=float).reshape(-1)
+    no_estimate = np.zeros(f_plus.shape[1])
+    if n_rungs < 4 or not np.all(ladder > 0):
+        return no_estimate
+    ratios = ladder[:-1] / ladder[1:]
+    if not np.allclose(ratios, ratios[0], rtol=1e-8):
+        return no_estimate
+
+    residuals = []
+    for differences, powers, n_windows in (
+        (
+            f_plus - 2 * f_0[None, :] + f_minus,
+            (0, 1, 2),
+            _LADDER_NOISE_WINDOWS[0],
+        ),
+        (f_plus - f_minus, (0, 1, 3), _LADDER_NOISE_WINDOWS[1]),
+    ):
+        weights = _annihilating_weights(ratios[0], powers)
+        n = len(weights)
+        combinations = np.stack(
+            [weights @ differences[i : i + n] for i in range(n_rungs - n + 1)]
+        )[-n_windows:]
+        # Each difference carries the noise of two independent evaluations.
+        residuals.append(combinations / (np.sqrt(2) * np.linalg.norm(weights)))
+    # Median absolute deviation -> standard deviation, for Gaussian noise.
+    sigma = np.median(np.abs(np.concatenate(residuals)), axis=0) / 0.6745
+    return np.where(np.isfinite(sigma), sigma, 0.0)
