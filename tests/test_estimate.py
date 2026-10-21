@@ -523,3 +523,135 @@ def test_point_within_bounds_is_not_rejected():
     )
     assert result.status == "converged"
     assert abs(result.value - 1.0) < 1e-6
+
+
+def test_point_on_bound_is_reported_at_bound():
+    """A direction with no room for a central-difference step is reported
+    as such, not as noise-dominated; other directions are unaffected."""
+
+    def f(x):
+        return np.array([x[0] ** 2 + x[1]])
+
+    results = estimate_gradient(
+        f,
+        np.array([1.0, 0.5]),
+        bounds=(np.array([0.0, 0.0]), np.array([1.0, 1.0])),
+    )
+    assert results[0].status == "at_bound"
+    assert np.isnan(results[0].value)
+    assert np.isnan(results[0].error_estimate)
+    assert results[1].status == "converged"
+    assert abs(results[1].value - 1.0) < 1e-6
+
+
+def test_point_on_bound_is_reported_at_bound_for_every_output():
+    def f(x):
+        return np.array([x[0] ** 2 + x[1], np.exp(x[0]) * x[1]])
+
+    jacobian = estimate_jacobian(
+        f,
+        np.array([1.0, 0.5]),
+        bounds=(np.array([0.0, 0.0]), np.array([1.0, 1.0])),
+    )
+    expected = [[2.0, 1.0], [0.5 * math.e, math.e]]
+    for i_out in range(2):
+        assert jacobian.estimates[i_out][0].status == "at_bound"
+        assert np.isnan(jacobian.estimates[i_out][0].value)
+        assert jacobian.estimates[i_out][1].status == "converged"
+        assert (
+            abs(jacobian.estimates[i_out][1].value - expected[i_out][1]) < 1e-6
+        )
+
+
+def _noisy_sine(x):
+    return np.array([np.sin(x[0]) + deterministic_noise(x[0], 1e-8)])
+
+
+def _sine_error_estimate():
+    error_estimate = estimate_directional_derivative(
+        _noisy_sine, np.array([0.7]), np.array([1.0])
+    ).error_estimate
+    # Ensure the relative criterion is not what decides in the tests below.
+    assert error_estimate / math.cos(0.7) > 1e-6
+    return error_estimate
+
+
+@pytest.mark.parametrize(
+    ("tol_factor", "expected_status"),
+    [(0.4, "converged"), (0.3, "noise_dominated")],
+)
+def test_default_tol_allows_error_estimate_up_to_three_times_tol(
+    monkeypatch, tol_factor, expected_status
+):
+    error_estimate = _sine_error_estimate()
+    monkeypatch.setattr(
+        "fiddy.estimate._default_tol",
+        lambda sigma: tol_factor * error_estimate,
+    )
+    result = estimate_directional_derivative(
+        _noisy_sine, np.array([0.7]), np.array([1.0])
+    )
+    assert result.error_estimate == error_estimate
+    assert result.status == expected_status
+
+
+@pytest.mark.parametrize(
+    ("tol_factor", "expected_status"),
+    [(1.2, "converged"), (0.9, "noise_dominated")],
+)
+def test_explicit_tol_is_not_relaxed(tol_factor, expected_status):
+    error_estimate = _sine_error_estimate()
+    result = estimate_directional_derivative(
+        _noisy_sine,
+        np.array([0.7]),
+        np.array([1.0]),
+        tol=tol_factor * error_estimate,
+    )
+    assert result.error_estimate == error_estimate
+    assert result.status == expected_status
+    assert (
+        result.diagnostics["converged_threshold"] == result.diagnostics["tol"]
+    )
+
+
+def _scaled_exp(x):
+    return np.array([1e3 * np.exp(x[0])])
+
+
+def test_small_relative_error_converges_regardless_of_default_tol(
+    monkeypatch,
+):
+    """An error estimate tiny relative to the value is converged even if it
+    exceeds the (here: artificially tiny) default tolerance."""
+    monkeypatch.setattr("fiddy.estimate._default_tol", lambda sigma: 1e-30)
+    result = estimate_directional_derivative(
+        _scaled_exp, np.array([1.0]), np.array([1.0])
+    )
+    assert result.error_estimate > 3e-30
+    assert result.error_estimate / abs(result.value) <= 1e-6
+    assert result.status == "converged"
+    assert abs(result.value - 1e3 * math.e) < 1e-6
+
+
+def test_small_relative_error_does_not_relax_explicit_tol():
+    result = estimate_directional_derivative(
+        _scaled_exp, np.array([1.0]), np.array([1.0]), tol=1e-30
+    )
+    assert result.error_estimate > 1e-30
+    assert result.status == "noise_dominated"
+
+
+def test_large_relative_error_is_not_converged_despite_large_tol(monkeypatch):
+    """An error estimate within the tolerance but comparable to the value
+    itself is not converged."""
+
+    def f(x):
+        return np.array([1e-12 * x[0] + deterministic_noise(x[0], 1e-8)])
+
+    monkeypatch.setattr("fiddy.estimate._default_tol", lambda sigma: 1.0)
+    result = estimate_directional_derivative(
+        f, np.array([0.7]), np.array([1.0])
+    )
+    assert result.error_estimate <= 3.0
+    assert result.error_estimate > 0.5 * abs(result.value)
+    assert result.status == "noise_dominated"

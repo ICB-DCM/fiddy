@@ -111,8 +111,9 @@ class DirectionCheckResult:
     outcome: str
     """One of "passed", "failed", "inconclusive" -- "inconclusive" means
     the FD engine itself could not produce a trustworthy estimate for this
-    direction (`estimate.status` was "noise_dominated" or
-    "discontinuity_suspected"), not that the supplied gradient was wrong.
+    direction (`estimate.status` was "noise_dominated",
+    "discontinuity_suspected" or "at_bound"), not that the supplied
+    gradient was wrong.
     Reported separately from "failed" rather than counted as a check
     failure, following the convention that mismatches near kinks/noise
     floors are expected, not bugs (``Cs231n`` in ``doc/references.bib``)."""
@@ -304,11 +305,11 @@ def check_gradient(
         an exception, or returns a non-finite (``NaN``/``inf``) value, at
         any point evaluated during the check (e.g. an ODE solver failing
         to converge at a perturbed parameter value). This is a distinct
-        failure mode from a `"noise_dominated"`/`"discontinuity_suspected"`
-        direction result: those mean the function *did* return usable
-        values but the derivative could not be confidently resolved from
-        them, whereas this means the function itself could not produce a
-        valid value at all -- almost always a problem with `function`
+        failure mode from a non-converged direction result
+        (`"noise_dominated"`, `"discontinuity_suspected"`, `"at_bound"`):
+        those mean the function *did* return usable values, but the
+        derivative could not be confidently resolved from them, whereas this means the function itself could not produce a valid
+        value at all -- almost always a problem with `function`
         (or the model/simulator behind it), not with fiddy's algorithm.
     """
     if random_directions is not None:

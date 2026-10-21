@@ -454,3 +454,15 @@ def test_bounds_prevent_a_domain_violation_that_would_otherwise_fail():
         f, point, expected, bounds=(np.array([0.0]), np.array([np.inf]))
     )
     assert result.success
+
+
+def test_point_on_bound_is_inconclusive():
+    def f(x):
+        return np.array([x[0] ** 2])
+
+    result = check_gradient(
+        f, np.array([1.0]), [2.0], bounds=(np.array([0.0]), np.array([1.0]))
+    )
+    assert result.direction_results[0].estimate.status == "at_bound"
+    assert result.direction_results[0].outcome == "inconclusive"
+    assert result.success

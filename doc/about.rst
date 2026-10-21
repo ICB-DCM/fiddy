@@ -54,7 +54,7 @@ Design principles
   Integration adapters live in the consumer's own repository.
 - **Honest uncertainty over confident wrongness.** Every derivative
   estimate carries a status (``"converged"``, ``"noise_dominated"``,
-  ``"discontinuity_suspected"``); a gradient check reports
+  ``"discontinuity_suspected"``, ``"at_bound"``); a gradient check reports
   non-converged directions as inconclusive, never silently folded into
   a false pass or a false fail.
 - **No user-supplied step sizes or tolerances by default.** Everything

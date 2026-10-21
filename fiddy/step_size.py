@@ -46,12 +46,12 @@ def clamp_step_to_bounds(
     both the forward and backward evaluation of a central difference),
     following scipy's own ``optimize.approx_derivative`` convention for
     `bounds`, without its one-sided-scheme fallback: if a symmetric step
-    this small already cannot fit, this simply shrinks it -- potentially
-    all the way to a step size that reports a direction as noise-
-    dominated rather than converged -- rather than adding a second,
-    asymmetric evaluation scheme purely to extract a few more
-    directions' worth of confident answers. Consistent with fiddy's
-    "honest uncertainty over confident wrongness" design.
+    cannot fit, this simply shrinks it. The direction may then be reported
+    as noise-dominated, or as "at_bound" if the step shrinks to zero,
+    instead of converged. An asymmetric evaluation scheme could resolve
+    a few more of these directions, but is not worth the extra
+    complexity; this is consistent with fiddy's "honest uncertainty over
+    confident wrongness" design.
 
     :param point: The point the step is taken from.
     :param direction: The direction the step is taken along.
