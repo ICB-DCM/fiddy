@@ -107,7 +107,7 @@ def test_reproducible_across_repeated_calls():
 def test_near_noise_floor_derivative_never_falsely_converges():
     """A direction whose true derivative is comparable in magnitude to
     the function's own noise floor must not be reported "converged"
-    unless the reported value is actually accurate. This is the hard
+    unless its error bar covers the true derivative. This is the hard
     regime a single `argmin` over a possibly non-monotonic error sequence
     can get badly wrong (confidently, not just imprecisely) -- see
     `fiddy.extrapolation`'s module docstring for the real case that
@@ -128,16 +128,10 @@ def test_near_noise_floor_derivative_never_falsely_converges():
 
     result = estimate_directional_derivative(f, x0, direction)
 
-    if result.status == "converged":
-        relative_error = abs(result.value - true_derivative) / max(
-            abs(true_derivative), 1e-300
-        )
-        assert relative_error < 0.05, (
-            "Reported 'converged' but the value is significantly wrong "
-            f"(relative error {relative_error:.2%}) -- exactly the "
-            "false-convergence failure mode the corroboration fix is "
-            "meant to prevent."
-        )
+    assert result.status == "converged"
+    assert abs(result.value - true_derivative) <= result.error_estimate
+    # The true derivative is far below the achievable precision.
+    assert not result.resolved
 
 
 def test_kink_is_flagged_not_silently_wrong():
@@ -541,6 +535,7 @@ def test_point_on_bound_is_reported_at_bound():
     assert results[0].status == "at_bound"
     assert np.isnan(results[0].value)
     assert np.isnan(results[0].error_estimate)
+    assert not results[0].resolved
     assert results[1].status == "converged"
     assert abs(results[1].value - 1.0) < 1e-6
 
@@ -642,9 +637,11 @@ def test_small_relative_error_does_not_relax_explicit_tol():
     assert result.status == "noise_dominated"
 
 
-def test_large_relative_error_is_not_converged_despite_large_tol(monkeypatch):
-    """An error estimate within the tolerance but comparable to the value
-    itself is not converged."""
+def test_error_estimate_larger_than_value_is_converged_but_not_resolved(
+    monkeypatch,
+):
+    """An error estimate within the tolerance is converged even if it
+    exceeds the value itself; the value is then not resolved."""
 
     def f(x):
         return np.array([1e-12 * x[0] + deterministic_noise(x[0], 1e-8)])
@@ -655,7 +652,16 @@ def test_large_relative_error_is_not_converged_despite_large_tol(monkeypatch):
     )
     assert result.error_estimate <= 3.0
     assert result.error_estimate > 0.5 * abs(result.value)
-    assert result.status == "noise_dominated"
+    assert result.status == "converged"
+    assert not result.resolved
+
+
+def test_well_resolved_derivative_is_resolved():
+    result = estimate_directional_derivative(
+        lambda x: np.array([np.sin(x[0])]), np.array([0.7]), np.array([1.0])
+    )
+    assert result.status == "converged"
+    assert result.resolved
 
 
 def test_diagnostics_report_f0():
