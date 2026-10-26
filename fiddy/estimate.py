@@ -270,9 +270,10 @@ class DerivativeEstimate:
     evaluation point than its finest rung, so no adjacent-rung comparison
     within either ladder ever disagrees."""
     diagnostics: dict[str, Any] = field(default_factory=dict)
-    """Additional diagnostics (``ladder``, ``central_values``,
-    ``gap_values``, ``tol``, ``converged_threshold`` (the bound on
-    `error_estimate` for "converged"), ``relative_error``, ``far_ladder``,
+    """Additional diagnostics (``f0`` (the function value at the point),
+    ``ladder``, ``central_values``, ``gap_values``, ``tol``,
+    ``converged_threshold`` (the bound on `error_estimate` for
+    "converged"), ``relative_error``, ``far_ladder``,
     ``far_central_values``), for plotting/debugging."""
 
 
@@ -618,6 +619,7 @@ def _estimate_from_ladder(
             status = "noise_dominated"
 
         diagnostics = {
+            "f0": float(f_0[j]),
             "ladder": ladder,
             "central_values": central_values[:, j],
             "gap_values": gap_values[:, j],
@@ -688,7 +690,8 @@ def estimate_directional_derivative(
         variation of the empirical noise floor and for the magnitude of
         the derivative.
     :param noise_floor: Optional noise-floor hint (e.g. an ODE solver's
-        own abstol); bypasses empirical noise estimation.
+        own abstol); bypasses empirical noise estimation, including its
+        rounding-level floor.
     :param nondet_tol: An expected magnitude of legitimate, non-noise
         value nondeterminism at the *same* point -- e.g. a simulator
         giving slightly different values with vs. without sensitivities
