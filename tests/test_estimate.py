@@ -424,7 +424,7 @@ def test_auto_noise_floor_strategy_escalates_when_shared_is_unconfident():
     component dominates the shared probe."""
 
     def f(x):
-        return np.array([x[1] ** 2 + np.exp(50 * x[0])])
+        return np.array([x[1] ** 2 + np.exp(5000 * x[0])])
 
     point = np.array([0.0, 1.0])
     directions = [np.array([0.0, 1.0])]
@@ -651,3 +651,62 @@ def test_diagnostics_report_f0():
     jacobian = estimate_jacobian(f, np.array([0.7]))
     assert jacobian.estimates[0][0].diagnostics["f0"] == np.exp(0.7)
     assert jacobian.estimates[1][0].diagnostics["f0"] == np.sin(0.7)
+
+
+@pytest.mark.parametrize("jump_at", [1.002, 1.02, 1.0003, 0.9997])
+def test_nearby_jump_does_not_inflate_the_noise_floor(jump_at):
+    """A jump close to the point must not be mistaken for noise, which
+    would make the step ladder far too coarse."""
+
+    def f(x):
+        return np.array([np.sin(x[0]) + (x[0] > jump_at)])
+
+    result = estimate_gradient(f, np.array([1.0]))[0]
+
+    assert result.status == "converged"
+    assert abs(result.value - math.cos(1.0)) < 1e-8
+
+
+@pytest.mark.parametrize("jumps_at", [(0.98, 1.02), (0.97, 0.99, 1.01, 1.04)])
+def test_several_jumps_nearby_do_not_inflate_the_noise_floor(jumps_at):
+    """In ODE models with events, the output can jump many times within
+    a few percent of a parameter's value."""
+
+    def f(x):
+        return np.array([np.sin(x[0]) + sum(x[0] > a for a in jumps_at)])
+
+    result = estimate_gradient(f, np.array([1.0]))[0]
+
+    assert result.status == "converged"
+    assert abs(result.value - math.cos(1.0)) < 1e-8
+
+
+def test_kink_at_the_point_is_flagged():
+    def f(x):
+        return np.array([np.sin(x[0]) + 1e-2 * abs(x[0] - 1.0)])
+
+    result = estimate_gradient(f, np.array([1.0]))[0]
+
+    assert result.status == "discontinuity_suspected"
+
+
+def test_jump_in_one_output_does_not_affect_the_others():
+    """The step ladder is shared by all outputs and driven by the largest
+    noise floor; a jump in one output must not inflate it."""
+
+    def f(x):
+        return np.array(
+            [np.sin(x[0]) + (x[0] > 1.0003), np.cos(x[0]), x[0] ** 3]
+        )
+
+    jacobian = estimate_jacobian(f, np.array([1.0]))
+
+    expected = [math.cos(1.0), -math.sin(1.0), 3.0]
+    for i, expected_i in enumerate(expected):
+        result = jacobian.output(i)[0]
+        assert result.status == "converged"
+        assert abs(result.value - expected_i) < 1e-8
+        assert result.noise.one_sided == (i == 0)
+    # The half the estimate was taken from has fewer orders.
+    assert jacobian.output(0)[0].noise.sigmas[-1] is None
+    assert jacobian.output(1)[0].noise.sigmas[-1] is not None

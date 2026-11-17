@@ -77,6 +77,8 @@ def plot_noise_floor(noise_floor: NoiseFloor, ax=None):
     ax.set_xlabel("finite-difference order k")
     ax.set_ylabel("sigma_level(k)")
     title = "Noise-floor plateau detection"
+    if noise_floor.one_sided:
+        title += " (one-sided)"
     if not noise_floor.confident:
         title += " (low confidence -- no plateau found)"
     ax.set_title(title)

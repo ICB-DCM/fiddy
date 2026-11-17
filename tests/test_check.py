@@ -444,7 +444,7 @@ def test_bounds_prevent_a_domain_violation_that_would_otherwise_fail():
     def f(x):
         return np.array([np.sqrt(x[0])])
 
-    point = np.array([0.01])
+    point = np.array([1e-4])
     expected = [1 / (2 * math.sqrt(point[0]))]
 
     with pytest.raises(FunctionEvaluationError):
