@@ -88,6 +88,44 @@ def test_default_probe_direction_is_unit_all_ones():
     assert np.allclose(direction, direction[0])
 
 
+def test_default_probe_direction_excludes_components_on_a_bound():
+    point = np.array([1.0, 2.0, 3.0, 4.0])
+    lower = np.array([0.0, 2.0, 0.0, 0.0])
+    upper = np.array([5.0, 5.0, 5.0, 4.0])
+    direction = default_probe_direction(point, (lower, upper))
+    assert np.isclose(np.linalg.norm(direction), 1.0)
+    assert np.all(direction[[1, 3]] == 0)
+    assert np.allclose(direction[[0, 2]], direction[0])
+    assert direction[0] > 0
+
+    # every component on a bound: nothing can be probed
+    direction = default_probe_direction(point, (point, upper))
+    assert np.all(direction == 0)
+
+
+def test_shared_probe_is_confident_with_some_components_on_a_bound():
+    """Components on a bound must not shrink the shared probe for all
+    other components (#91)."""
+    point = np.linspace(1.0, 2.0, 6)
+    lower = point * 0.5
+    lower[-2:] = point[-2:]
+    bounds = (lower, point * 2.0)
+    probe_points = []
+
+    def f(p):
+        probe_points.append(np.array(p))
+        return np.array([np.sum(np.sin(p))])
+
+    result = estimate_model_noise_floor(f, point, bounds=bounds)
+
+    assert noise_floor_is_confident(result)
+    probe_points = np.array(probe_points)
+    # the free components were actually perturbed ...
+    assert np.ptp(probe_points[:, 0]) > 0
+    # ... and the ones on their bound were not
+    assert np.all(probe_points[:, -2:] == point[-2:])
+
+
 def test_estimate_model_noise_floor_uses_one_shared_probe():
     call_count = 0
 

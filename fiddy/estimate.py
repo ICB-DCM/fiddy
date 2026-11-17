@@ -738,8 +738,8 @@ def estimate_directional_derivative(
         silently collapsing every step to zero.
     :param noise_floor_strategy: See :func:`estimate_gradient` -- with
         only one direction here, `"per_direction"`/escalated `"auto"`
-        probes along `direction` itself rather than the shared,
-        all-ones default.
+        probes along `direction` itself rather than the shared
+        default (:func:`fiddy.noise.default_probe_direction`).
     :param executor: How to dispatch the batch of
         ``2 * (n_rungs + n_rungs_far) + 1`` ladder evaluations
         (``f(x0)``, ``f(x0 +/- h)`` per main and far rung) -- e.g.
@@ -912,7 +912,10 @@ def estimate_gradient(
         "noise_dominated" results. `"per_direction"`/escalated `"auto"`
         isolates this: only the genuinely bound-constrained directions
         end up honestly uncertain, every other direction resolves
-        cleanly and confidently.
+        cleanly and confidently. Parameters exactly *on* a bound are
+        excluded from the shared probe (see
+        :func:`fiddy.noise.default_probe_direction`), so they don't
+        trigger this escalation unless all of them are on a bound.
     :param executor: See :func:`estimate_directional_derivative` --
         applied identically to every direction.
     :return: One `DerivativeEstimate` per direction, in the same order.
