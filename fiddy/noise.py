@@ -67,12 +67,32 @@ class NoiseFloor:
     enough table entries to compute, in order (``sigmas[0]`` is level 1,
     etc.). Kept for diagnostics/plotting (:func:`fiddy.plotting.
     plot_noise_floor`), not needed for the estimate itself. Each entry is
-    an ``(n_outputs,)`` array for multi-output."""
+    an ``(n_outputs,)`` array for multi-output. If `one_sided` is set,
+    `level`, `confident` and `sigmas` refer to the half of the probe
+    points the estimate was taken from. The half has fewer orders; the
+    missing entries at the end are ``None`` (``NaN`` for multi-output)."""
+    one_sided: bool | np.ndarray = False
+    """Whether `sigma` was estimated from only one half of the probe
+    points, because the estimate from all points was much larger, e.g. due
+    to a jump or kink in the other half or at the center (see
+    :func:`estimate_noise_floor`). An ``(n_outputs,)``
+    bool array for multi-output."""
 
 
 _ROUNDING_FLOOR_FACTOR = 1.0
 """Lower bound on the noise floor, in units of ``eps * median|f|`` over the
-probe points (see `_analyze_noise_table`)."""
+probe points (see `_apply_rounding_floor`)."""
+
+_DEFAULT_RELATIVE_SPACING = 1e-4
+"""Default probe spacing relative to the point's magnitude along the probe
+direction (see `_noise_floor_probe_points`)."""
+
+_SPLIT_RATIO = 10.0
+"""Factor by which the estimate from all probe values must exceed the one
+from a half to use the latter (see `_analyze_noise_table`)."""
+
+_MIN_HALF_POINTS = 5
+"""Minimum number of points per half for the split analysis."""
 
 
 def _noise_floor_probe_points(
@@ -92,16 +112,18 @@ def _noise_floor_probe_points(
 
     :param point: The point to probe around.
     :param direction: The direction to probe along.
-    :param h0: The spacing between probe points, or `None` to default to
-        1% of the point's magnitude along `direction` (falling back to an
-        absolute step of ``0.01`` near the origin).
+    :param h0: The spacing between probe points, or `None` for the default
+        (see :func:`estimate_noise_floor`).
     :param n_points: Number of equally spaced probe points.
     :param bounds: Optional per-parameter valid domain; see
         :func:`fiddy.step_size.clamp_step_to_bounds`.
     :return: The `n_points` probe points, in order.
     """
     if h0 is None:
-        h0 = max(abs(float(np.dot(point, direction))), 1.0) * 1e-2
+        h0 = (
+            max(abs(float(np.dot(point, direction))), 1.0)
+            * _DEFAULT_RELATIVE_SPACING
+        )
 
     max_offset = (n_points - 1) / 2 * h0
     clamped_max_offset = clamp_step_to_bounds(
@@ -111,21 +133,131 @@ def _noise_floor_probe_points(
         h0 = h0 * (clamped_max_offset / max_offset)
 
     offsets = (np.arange(n_points) - (n_points - 1) / 2) * h0
-    return [point + t * direction for t in offsets]
+    points = [point + t * direction for t in offsets]
+    if bounds is not None:
+        # The clamped outermost points can exceed the bounds by rounding.
+        points = [np.clip(p, *bounds) for p in points]
+    return points
 
 
 def _analyze_noise_table(
-    values: np.ndarray, plateau_ratio: float
+    values: np.ndarray,
+    plateau_ratio: float,
+    split_ratio: float = _SPLIT_RATIO,
 ) -> NoiseFloor:
-    """Turn one direction's probe evaluations into a :class:`NoiseFloor`,
-    via the plateau-detection criterion described in
-    :func:`estimate_noise_floor`'s own docstring -- factored out so the
-    same analysis can run on results gathered from a combined,
-    multi-direction batch dispatch (see :func:`_noise_floor_probe_points`).
+    """Turn one direction's probe evaluations into a :class:`NoiseFloor`.
+
+    Applies the plateau-detection criterion described in
+    :func:`estimate_noise_floor` to all probe values, and to the two
+    halves left and right of the center point. If the estimate from all
+    values exceeds the smaller half's by more than `split_ratio`, a jump
+    or kink is assumed in the other half or at the center, and the smaller
+    half's estimate is used. All estimates are floored at the rounding
+    level before comparing. The middle point (two for even ``n_points``) is
+    excluded from both halves, so that an outlier exactly at the probed
+    point (e.g., a solver evaluated exactly at an event time) affects
+    neither.
+
+    Factored out so the same analysis can run on results gathered from a
+    combined, multi-direction batch dispatch (see
+    :func:`_noise_floor_probe_points`).
 
     :param values: The probe evaluations, shape ``(n_points, n_outputs)``.
     :param plateau_ratio: See :func:`estimate_noise_floor`.
+    :param split_ratio: See above.
     :return: The estimated noise floor.
+    """
+    n_points, n_outputs = values.shape
+    sigma, level_arr, confident, sigmas = _plateau_estimate(
+        values, plateau_ratio
+    )
+    sigma = _apply_rounding_floor(sigma, values)
+
+    one_sided = np.zeros(n_outputs, dtype=bool)
+    n_half = (n_points - 1) // 2
+    if n_half >= _MIN_HALF_POINTS:
+        left, right = (
+            _plateau_estimate(half, plateau_ratio)
+            for half in (values[:n_half], values[n_points - n_half :])
+        )
+        left_sigma = _apply_rounding_floor(left[0], values[:n_half])
+        right_sigma = _apply_rounding_floor(
+            right[0], values[n_points - n_half :]
+        )
+        use_right = right_sigma < left_sigma
+        half_sigma = np.where(use_right, right_sigma, left_sigma)
+        one_sided = sigma > split_ratio * half_sigma
+        use_left = one_sided & ~use_right
+        use_right &= one_sided
+        sigma = np.where(one_sided, half_sigma, sigma)
+        sigma = _apply_rounding_floor(sigma, values)
+        for mask, (_, h_level, h_confident, h_sigmas) in (
+            (use_left, left),
+            (use_right, right),
+        ):
+            level_arr = np.where(mask, h_level, level_arr)
+            confident = np.where(mask, h_confident, confident)
+            sigmas = [
+                full
+                if full is None
+                else np.where(
+                    mask, h_sigmas[k] if k < len(h_sigmas) else np.nan, full
+                )
+                for k, full in enumerate(sigmas)
+            ]
+
+    if n_outputs == 1:
+        return NoiseFloor(
+            sigma=float(sigma[0]),
+            level=(int(level_arr[0]) if level_arr[0] > 0 else None),
+            confident=bool(confident[0]),
+            sigmas=[
+                None if s is None or np.isnan(s[0]) else float(s[0])
+                for s in sigmas
+            ],
+            one_sided=bool(one_sided[0]),
+        )
+    return NoiseFloor(
+        sigma=sigma,
+        level=level_arr,
+        confident=confident,
+        sigmas=sigmas,
+        one_sided=one_sided,
+    )
+
+
+def _apply_rounding_floor(sigma: np.ndarray, values: np.ndarray) -> np.ndarray:
+    """Floor noise estimates at the rounding level of the function values.
+
+    The floor of a few ulps covers rounding errors accumulated in typical
+    computations, and the sampling error of the table estimate itself,
+    which otherwise makes downstream budgets platform-dependent.
+    Non-finite probe values are ignored.
+
+    :param sigma: Noise estimates, shape ``(n_outputs,)``.
+    :param values: The probe evaluations, shape ``(n_points, n_outputs)``.
+    :return: The floored estimates.
+    """
+    magnitude = np.where(np.isfinite(values), np.abs(values), np.nan)
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", RuntimeWarning)  # all-NaN columns
+        magnitude = np.nan_to_num(np.nanmedian(magnitude, axis=0), nan=0.0)
+    rounding_floor = _ROUNDING_FLOOR_FACTOR * np.finfo(float).eps * magnitude
+    return np.maximum(sigma, rounding_floor)
+
+
+def _plateau_estimate(
+    values: np.ndarray, plateau_ratio: float
+) -> tuple[np.ndarray, np.ndarray, np.ndarray, list[np.ndarray | None]]:
+    """Plateau-detection noise estimate from equally spaced values.
+
+    See :func:`estimate_noise_floor` for the criterion.
+
+    :param values: The probe evaluations, shape ``(n_points, n_outputs)``.
+    :param plateau_ratio: See :func:`estimate_noise_floor`.
+    :return: ``(sigma, level, confident, sigmas)``: per-component estimate
+        (not floored at the rounding level), plateau level (``-1`` if
+        none), whether a plateau was found, and per-level estimates.
     """
     n_points, n_outputs = values.shape
 
@@ -180,31 +312,7 @@ def _analyze_noise_table(
     # Anything still unset (no usable levels at all for that component)
     # falls back to machine epsilon.
     sigma[np.isnan(sigma)] = np.finfo(float).eps
-
-    # Conservative floor of a few ulps: covers rounding errors accumulated
-    # in typical computations, and the sampling error of the table estimate
-    # itself, which otherwise makes downstream budgets platform-dependent.
-    # Non-finite probe values are ignored here.
-    magnitude = np.where(np.isfinite(values), np.abs(values), np.nan)
-    with warnings.catch_warnings():
-        warnings.simplefilter("ignore", RuntimeWarning)  # all-NaN columns
-        magnitude = np.nan_to_num(np.nanmedian(magnitude, axis=0), nan=0.0)
-    rounding_floor = _ROUNDING_FLOOR_FACTOR * np.finfo(float).eps * magnitude
-    sigma = np.maximum(sigma, rounding_floor)
-
-    if n_outputs == 1:
-        return NoiseFloor(
-            sigma=float(sigma[0]),
-            level=(int(level_arr[0]) if confident[0] else None),
-            confident=bool(confident[0]),
-            sigmas=[None if s is None else float(s[0]) for s in sigmas],
-        )
-    return NoiseFloor(
-        sigma=sigma,
-        level=level_arr,
-        confident=confident,
-        sigmas=sigmas,
-    )
+    return sigma, level_arr, confident, sigmas
 
 
 def estimate_noise_floor(
@@ -233,6 +341,19 @@ def estimate_noise_floor(
     ``k`` with ``sigma_level(k) / sigma_level(k+1) < plateau_ratio`` -- and
     reports the plateau value as the noise floor.
 
+    A jump or kink within the probe span dominates every order of the table
+    and would be mistaken for noise. Therefore, the same estimate is also
+    computed from the ``(n_points - 1) // 2`` points on either side,
+    excluding the middle point(s), if ``n_points >= 11``. If the estimate
+    from all points exceeds the smaller of these by more than a factor of
+    10, the smaller one is used (see :attr:`NoiseFloor.one_sided`). This
+    handles a single jump or kink within the probe span. A noise level that
+    changes within the probe span has the same effect, and the noise is then
+    underestimated if the point is on the noisier side. The default probe
+    spacing is small to make multiple jumps unlikely: in ODE models with
+    events, jumps occur whenever an event time crosses an output time, which
+    can happen many times within a few percent of a parameter's value.
+
     The estimate is never smaller than ``eps * median|f|`` over the probe
     points, i.e. about two ulps of the function values. This conservative
     floor covers rounding errors accumulated in typical computations and
@@ -244,12 +365,14 @@ def estimate_noise_floor(
     :param function: The blackbox function.
     :param point: The point to probe around.
     :param direction: The direction to probe along.
-    :param h0: The spacing between probe points. Defaults to 1% of the
-        point's magnitude along ``direction`` (falling back to an
-        absolute step of ``0.01`` near the origin).
+    :param h0: The spacing between probe points. Defaults to ``1e-4``
+        times the point's magnitude along ``direction`` (falling back to
+        an absolute step of ``1e-4`` near the origin).
     :param n_points: Number of equally spaced probe points. More points
         give more headroom for the plateau to appear within resolvable
-        orders, at the cost of more function evaluations.
+        orders, at the cost of more function evaluations. At least 11
+        are needed for the estimate from either half (see above); with
+        fewer than 15, these are often not confident.
     :param plateau_ratio: How close two consecutive orders' estimates
         must be (``sigma_level(k) / sigma_level(k+1) < plateau_ratio``)
         to be treated as "the shrinkage has stopped."

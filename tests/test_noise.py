@@ -1,4 +1,5 @@
 import numpy as np
+import pytest
 from helpers import deterministic_noise
 
 from fiddy.noise import (
@@ -242,3 +243,142 @@ def test_noise_floor_is_confident_multi_output_requires_all_confident():
             sigmas=[],
         )
     )
+
+
+@pytest.mark.parametrize("jump_at", [1.0003, 0.9997])
+def test_jump_within_probe_span_is_not_mistaken_for_noise(jump_at):
+    """A jump within the probe span would dominate the difference table;
+    the estimate from the half without the jump is used."""
+
+    def f(x):
+        return np.array([np.sin(x[0]) + (x[0] > jump_at)])
+
+    result = estimate_noise_floor(f, np.array([1.0]), np.array([1.0]))
+
+    assert result.one_sided
+    assert result.confident
+    assert result.sigma < 1e-14
+    # The diagnostics refer to the half the estimate was taken from.
+    assert result.sigmas[result.level - 1] < 1e-14
+
+
+def test_one_sided_estimate_without_plateau_is_not_confident():
+    """With 11 probe points, each half has only 5 points, too few to
+    resolve a plateau of this function."""
+
+    def f(x):
+        return np.array([np.sin(x[0]) + (x[0] > 1.00005)])
+
+    result = estimate_noise_floor(
+        f, np.array([1.0]), np.array([1.0]), n_points=11
+    )
+
+    assert result.one_sided
+    assert not result.confident
+    assert result.level is None
+
+
+def test_kink_at_the_point_is_not_mistaken_for_noise():
+    def f(x):
+        return np.array([np.sin(x[0]) + 1e-2 * abs(x[0] - 1.0)])
+
+    result = estimate_noise_floor(f, np.array([1.0]), np.array([1.0]))
+
+    assert result.one_sided
+    assert result.sigma < 1e-14
+
+
+def test_noise_without_features_is_rarely_estimated_one_sided():
+    """With only 7 points per half, the half estimates scatter; for i.i.d.
+    noise on a smooth function, a one-sided estimate occurs in ~0.3 % of
+    probes."""
+    rng = np.random.default_rng(0)
+    ratios = []
+    n_one_sided = 0
+    for _ in range(200):
+        result = estimate_noise_floor(
+            lambda x: np.array([np.sin(x[0]) + 1e-8 * rng.standard_normal()]),
+            np.array([1.0]),
+            np.array([1.0]),
+        )
+        n_one_sided += result.one_sided
+        ratios.append(result.sigma / 1e-8)
+    assert n_one_sided <= 2
+    assert 0.5 < np.median(ratios) < 2
+    assert np.quantile(ratios, 0.02) > 1 / 3
+    assert np.quantile(ratios, 0.98) < 3
+
+
+def test_only_the_component_with_a_jump_is_estimated_one_sided():
+    def f(x):
+        return np.array(
+            [
+                np.sin(x[0]) + (x[0] > 1.0003),
+                np.cos(x[0]) + (x[0] < 0.9997),
+                x[0] ** 3,
+            ]
+        )
+
+    result = estimate_noise_floor(f, np.array([1.0]), np.array([1.0]))
+
+    assert result.one_sided.tolist() == [True, True, False]
+    assert np.all(result.sigma < 1e-14)
+    # The diagnostics of each component refer to the half it was taken
+    # from: the halves have fewer orders than the full table.
+    assert np.all(result.level > 0)
+    for j in range(3):
+        single = estimate_noise_floor(
+            lambda x, j=j: f(x)[j : j + 1], np.array([1.0]), np.array([1.0])
+        )
+        assert result.level[j] == single.level
+        assert result.sigma[j] == single.sigma
+        assert [
+            None if np.isnan(s[j]) else float(s[j]) for s in result.sigmas
+        ] == single.sigmas
+    assert np.isnan(result.sigmas[-1][:2]).all()
+    assert not np.isnan(result.sigmas[-1][2])
+
+
+def test_outlier_at_the_point_is_not_mistaken_for_noise():
+    def f(x):
+        return np.array([np.sin(x[0]) + (x[0] == 1.0)])
+
+    result = estimate_noise_floor(f, np.array([1.0]), np.array([1.0]))
+
+    assert result.one_sided
+    assert result.sigma < 1e-14
+
+
+@pytest.mark.parametrize(
+    "f",
+    [
+        np.exp,
+        lambda x: 1 / x,
+        lambda x: np.exp(-(x**2)),
+        lambda x: 3.0 + 0 * x,
+    ],
+)
+@pytest.mark.parametrize("x0", [0.3, 1.0, 7.0])
+def test_noiseless_smooth_function_is_not_estimated_one_sided(f, x0):
+    """The halves' estimates are floored at the rounding level; otherwise,
+    they can be far below the full estimate for noiseless functions."""
+    result = estimate_noise_floor(
+        lambda x: np.array([f(x[0])]), np.array([x0]), np.array([1.0])
+    )
+
+    assert not result.one_sided
+
+
+def test_noise_floor_is_at_least_the_rounding_error_of_all_probe_values():
+    """With a large jump beyond the point, the rounding floor is taken
+    over all probe values, not only those the estimate was taken from."""
+
+    def f(x):
+        return np.array([1e-3 * np.sin(x[0]) + 1e6 * (x[0] > 1.0)])
+
+    values = [f(np.array([1.0 + 1e-4 * i]))[0] for i in range(-7, 8)]
+
+    result = estimate_noise_floor(f, np.array([1.0]), np.array([1.0]))
+
+    assert result.one_sided
+    assert result.sigma == np.finfo(float).eps * np.median(np.abs(values))

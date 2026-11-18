@@ -352,13 +352,17 @@ def _noise_floor_component(noise: NoiseFloor, j: int) -> NoiseFloor:
     else:
         level_value = level
     sigmas_j = [
-        None if s is None else float(np.atleast_1d(s)[j]) for s in noise.sigmas
+        None
+        if s is None or np.isnan(np.atleast_1d(s)[j])
+        else float(np.atleast_1d(s)[j])
+        for s in noise.sigmas
     ]
     return NoiseFloor(
         sigma=float(sigma[j]),
         level=level_value,
         confident=confident_j,
         sigmas=sigmas_j,
+        one_sided=bool(np.broadcast_to(noise.one_sided, sigma.shape)[j]),
     )
 
 
