@@ -5,11 +5,17 @@ import pytest
 from helpers import deterministic_noise
 
 from fiddy.estimate import (
+    _estimate_from_ladder,
+    _ladder_noise_error,
     estimate_directional_derivative,
     estimate_gradient,
     estimate_jacobian,
 )
-from fiddy.noise import estimate_model_noise_floor, noise_floor_is_confident
+from fiddy.noise import (
+    NoiseFloor,
+    estimate_model_noise_floor,
+    noise_floor_is_confident,
+)
 
 
 def test_smooth_function_converges_accurately():
@@ -710,3 +716,181 @@ def test_jump_in_one_output_does_not_affect_the_others():
     # The half the estimate was taken from has fewer orders.
     assert jacobian.output(0)[0].noise.sigmas[-1] is None
     assert jacobian.output(1)[0].noise.sigmas[-1] is not None
+
+
+def test_ladder_noise_estimate_is_calibrated_for_independent_noise():
+    rng = np.random.default_rng(0)
+    sigma = 1e-12
+    ladder = 1e-4 * 0.5 ** np.arange(8)
+    ratios = []
+    for _ in range(300):
+        f_plus = np.sin(1 + ladder) + sigma * rng.standard_normal(8)
+        f_minus = np.sin(1 - ladder) + sigma * rng.standard_normal(8)
+        central_values = ((f_plus - f_minus) / (2 * ladder))[:, None]
+        ladder_sigma, _ = _ladder_noise_error(
+            ladder, central_values, np.array([7])
+        )
+        ratios.append(ladder_sigma[0] / sigma)
+    assert 0.8 < np.median(ratios) < 1.2
+
+
+def test_ladder_noise_cancels_the_leading_truncation_terms():
+    ladder = 1e-1 * 0.5 ** np.arange(8)
+    central_values = (3.0 + 2.0 * ladder**2 - 1e3 * ladder**4)[:, None]
+    ladder_sigma, _ = _ladder_noise_error(
+        ladder, central_values, np.array([4])
+    )
+    # without cancelling the h**4 term: 3e-7
+    assert ladder_sigma[0] < 1e-13
+
+
+# Ladder and central differences of a failing CI check (AMICI, SBML test
+# suite case 00404, forward sensitivities): the probe estimate was
+# one-sided and not confident, and the noise floor about 15x too small.
+_LADDER_00404 = np.array(
+    [
+        3.557316404044306e-05,
+        1.778658202022153e-05,
+        8.893291010110765e-06,
+        4.4466455050553825e-06,
+        2.2233227525276913e-06,
+        1.1116613762638456e-06,
+        5.558306881319228e-07,
+        2.779153440659614e-07,
+    ]
+)
+_CENTRAL_VALUES_00404 = np.array(
+    [
+        -0.10190943089119614,
+        -0.10190939986264524,
+        -0.1019093973034608,
+        -0.10190939163580354,
+        -0.10190939578043395,
+        -0.10190939747823437,
+        -0.1019094106611552,
+        -0.10190939747823437,
+    ]
+)
+_EXACT_00404 = -0.1019093903514399
+
+
+def _estimate_00404(noise):
+    f_plus = (_CENTRAL_VALUES_00404 * _LADDER_00404)[:, None]
+    return _estimate_from_ladder(
+        _LADDER_00404,
+        np.zeros(1),
+        f_plus,
+        -f_plus,
+        noise,
+        tol=6.187233641148393e-09,
+        nondet_tol=0.0,
+        tol_is_default=True,
+    )[0]
+
+
+def test_ladder_noise_raises_the_error_estimate_for_an_uncertain_probe():
+    noise = NoiseFloor(
+        sigma=1.376542953468732e-15,
+        level=None,
+        confident=False,
+        sigmas=[],
+        one_sided=True,
+    )
+    estimate = _estimate_00404(noise)
+
+    error = abs(estimate.value - _EXACT_00404)
+    assert estimate.diagnostics["extrapolation_error"] < error / 3
+    assert estimate.error_estimate > error
+    assert estimate.status == "converged"
+
+
+def test_ladder_noise_does_not_change_the_estimate_for_a_confident_probe():
+    noise = NoiseFloor(
+        sigma=1.376542953468732e-15, level=5, confident=True, sigmas=[]
+    )
+    estimate = _estimate_00404(noise)
+
+    assert (
+        estimate.error_estimate == estimate.diagnostics["extrapolation_error"]
+    )
+
+
+def test_ladder_noise_is_capped_relative_to_the_noise_floor():
+    """A single deviating evaluation at a fine rung inflates the ladder's
+    noise estimate, but raises the error estimate by a bounded factor."""
+    probe_sigma = 1e-14
+    noise = NoiseFloor(
+        sigma=probe_sigma, level=None, confident=False, sigmas=[]
+    )
+    ladder = 1e-4 * 0.5 ** np.arange(8)
+    f_plus = np.sin(1 + ladder)
+    f_plus[4] += 1e4 * probe_sigma
+    f_minus = np.sin(1 - ladder)
+
+    estimate = _estimate_from_ladder(
+        ladder,
+        np.array([np.sin(1)]),
+        f_plus[:, None],
+        f_minus[:, None],
+        noise,
+        tol=1e-6,
+        nondet_tol=0.0,
+        tol_is_default=True,
+    )[0]
+
+    assert estimate.diagnostics["ladder_sigma"] > 100 * probe_sigma
+    _, gain = _ladder_noise_error(
+        ladder,
+        ((f_plus - f_minus) / (2 * ladder))[:, None],
+        estimate.extrapolation.best_index,
+    )
+    assert estimate.diagnostics["extrapolation_error"] < (
+        10 * probe_sigma * gain[0]
+    )
+    assert np.isclose(estimate.error_estimate, 10 * probe_sigma * gain[0])
+
+
+def test_ladder_noise_raises_the_error_estimate_of_a_one_sided_estimate():
+    """End to end: a jump in one half of the probe makes the noise floor
+    one-sided, and the ladder's noise estimate is used."""
+    rng = np.random.default_rng(1)
+    sigma = 1e-10
+
+    def f(x):
+        return np.array(
+            [np.sin(x[0]) + (x[0] > 1.0004) + sigma * rng.standard_normal()]
+        )
+
+    result = estimate_directional_derivative(
+        f, np.array([1.0]), np.array([1.0])
+    )
+
+    assert result.noise.one_sided
+    assert np.isfinite(result.diagnostics["ladder_sigma"])
+    assert result.error_estimate >= result.diagnostics["extrapolation_error"]
+    assert abs(result.value - np.cos(1.0)) < 3 * result.error_estimate
+
+
+def test_ladder_noise_ignores_a_truncation_dominated_coarse_window():
+    """Higher-order truncation terms can dominate the coarsest window."""
+    rng = np.random.default_rng(2)
+    sigma = 1e-12
+    ladder = 1e-2 * 0.5 ** np.arange(8)
+    # D(h) gets a term 1e8 * h**6, not cancelled by the windows
+    f_plus = np.sin(1 + ladder) + 1e8 * ladder**7
+    f_minus = np.sin(1 - ladder) - 1e8 * ladder**7
+    f_plus += sigma * rng.standard_normal(8)
+    f_minus += sigma * rng.standard_normal(8)
+    central_values = ((f_plus - f_minus) / (2 * ladder))[:, None]
+    noise_free = (
+        (np.sin(1 + ladder) - np.sin(1 - ladder)) / (2 * ladder)
+        + 1e8 * ladder**6
+    )[:, None]
+
+    truncation_only, _ = _ladder_noise_error(ladder, noise_free, np.array([5]))
+    ladder_sigma, _ = _ladder_noise_error(
+        ladder, central_values, np.array([5])
+    )
+
+    assert truncation_only[0] < 3 * sigma
+    assert ladder_sigma[0] < 3 * sigma

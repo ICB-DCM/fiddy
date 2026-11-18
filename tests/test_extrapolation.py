@@ -6,6 +6,7 @@ from helpers import deterministic_noise
 
 from fiddy.extrapolation import (
     _best_diagonal_estimate,
+    _neville_weights,
     extrapolate_central_differences,
     neville_extrapolate,
 )
@@ -223,3 +224,13 @@ def test_best_diagonal_estimate_early_stopping_boundary():
         diagonal_stops, safe=2.0
     )
     assert best_index[0] == 1
+
+
+def test_neville_weights_reproduce_the_diagonal():
+    ladder = 1e-3 * 0.5 ** np.arange(6)
+    values = np.cos(ladder) + 1e-3 * np.arange(6) ** 2
+    diagonal = neville_extrapolate(ladder**2, values)
+    for index in range(6):
+        weights = _neville_weights(ladder, index)
+        assert np.isclose(weights.sum(), 1.0)
+        assert np.isclose(weights @ values[: index + 1], diagonal[index])
