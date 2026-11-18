@@ -296,10 +296,8 @@ def noise_floor_is_confident(noise: NoiseFloor) -> bool:
     crushed down to (numerically) zero makes every probe point evaluate
     to the same value: no plateau is found (`confident` is false), and
     `sigma` is only the rounding floor, or zero for an all-zero output --
-    "the probe itself was too small to measure anything", found via a
-    real, bounds-constrained PEtab model (see
-    :func:`fiddy.noise.default_probe_direction`'s own docstring for the
-    underlying shared-probe cross-contamination this guards against). A
+    "the probe itself was too small to measure anything", e.g. if `point`
+    is on a bound in every component, or close to a bound in one. A
     `NoiseFloor` constructed directly can still be confident with zero
     `sigma`, hence the second check.
 
@@ -312,7 +310,9 @@ def noise_floor_is_confident(noise: NoiseFloor) -> bool:
     return confident and nonzero
 
 
-def default_probe_direction(point: Type.POINT) -> np.ndarray:
+def default_probe_direction(
+    point: Type.POINT, bounds: Type.BOUNDS | None = None
+) -> np.ndarray:
     """A generic direction for a single, shared, per-point noise estimate.
 
     Estimating a noise floor along every parameter direction separately
@@ -350,15 +350,30 @@ def default_probe_direction(point: Type.POINT) -> np.ndarray:
     `fiddy.check_gradient`/`fiddy.check_jacobian` entry points), not a
     cleverer probe direction.
 
-    :param point: The point a probe direction is needed for (only its
-        dimensionality is used).
-    :return: A normalized all-ones vector of the same dimensionality as
-        `point`.
+    Components where `point` lies on (or outside) a bound are excluded
+    (set to zero): a central-difference probe cannot move them at all,
+    and including them would make
+    :func:`fiddy.step_size.clamp_step_to_bounds` shrink the probe to
+    zero for *all* components.
+
+    :param point: The point a probe direction is needed for.
+    :param bounds: Optional ``(lower, upper)`` valid domain, as for
+        :func:`estimate_noise_floor`.
+    :return: A normalized vector of the same dimensionality as `point`,
+        with equal entries for all components not on a bound, and zero
+        entries for components on a bound. All zeros if every component
+        is on a bound.
     """
     point = np.asarray(point, dtype=float)
-    ones = np.ones_like(point)
-    norm = np.linalg.norm(ones)
-    return ones / norm if norm > 0 else ones
+    direction = np.ones_like(point)
+    if bounds is not None:
+        lower, upper = bounds
+        on_bound = (point <= np.asarray(lower, dtype=float)) | (
+            point >= np.asarray(upper, dtype=float)
+        )
+        direction[on_bound] = 0.0
+    norm = np.linalg.norm(direction)
+    return direction / norm if norm > 0 else direction
 
 
 def estimate_model_noise_floor(
@@ -376,5 +391,5 @@ def estimate_model_noise_floor(
         ``n_points``, ``plateau_ratio``, ``executor``, ``bounds``).
     :return: The estimated noise floor.
     """
-    direction = default_probe_direction(point)
+    direction = default_probe_direction(point, kwargs.get("bounds"))
     return estimate_noise_floor(function, point, direction, **kwargs)
