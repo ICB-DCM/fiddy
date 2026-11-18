@@ -83,6 +83,27 @@ def neville_extrapolate(xs: np.ndarray, ys: np.ndarray) -> np.ndarray:
     return np.array([q[j, j] for j in range(n)])
 
 
+def _neville_weights(ladder: np.ndarray, index: int) -> np.ndarray:
+    """Weights of the central differences in a Neville diagonal entry.
+
+    The diagonal entry `index` of :func:`neville_extrapolate` (in
+    ``u = h**2``, evaluated at ``u = 0``) is the linear combination
+    ``sum(w[i] * D(h_i))`` of the central differences at the first
+    ``index + 1`` rungs, with the Lagrange weights returned here.
+
+    :param ladder: The step-size ladder.
+    :param index: The diagonal entry.
+    :return: The weights, shape ``(index + 1,)``.
+    """
+    u = np.asarray(ladder[: index + 1], dtype=float) ** 2
+    weights = np.ones(index + 1)
+    for i in range(index + 1):
+        for m in range(index + 1):
+            if m != i:
+                weights[i] *= u[m] / (u[m] - u[i])
+    return weights
+
+
 def _best_diagonal_estimate(
     diagonal: np.ndarray,
     safe: float = 2.0,

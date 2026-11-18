@@ -38,6 +38,7 @@ multi-output function like any other.
 
 from __future__ import annotations
 
+import warnings
 from dataclasses import dataclass, field
 from typing import Any, TypedDict
 
@@ -51,7 +52,11 @@ from .discontinuity import (
     check_discontinuity,
 )
 from .executor import Executor, SequentialExecutor
-from .extrapolation import ExtrapolationResult, extrapolate_central_differences
+from .extrapolation import (
+    ExtrapolationResult,
+    _neville_weights,
+    extrapolate_central_differences,
+)
 from .function import Function
 from .noise import (
     NoiseFloor,
@@ -239,7 +244,11 @@ class DerivativeEstimate:
     value: float
     """The extrapolated derivative estimate."""
     error_estimate: float
-    """The estimate's own reported uncertainty."""
+    """The estimate's own reported uncertainty: the extrapolation's error
+    estimate, raised to the effect of the noise within the ladder if the
+    empirical noise floor may be too small (see
+    `diagnostics["extrapolation_error"]` and
+    `diagnostics["ladder_sigma"]`)."""
     status: str
     """One of "converged", "noise_dominated", "discontinuity_suspected",
     "at_bound". "converged" means `error_estimate` is small in absolute
@@ -275,8 +284,11 @@ class DerivativeEstimate:
     """Additional diagnostics (``f0`` (the function value at the point),
     ``ladder``, ``central_values``, ``gap_values``, ``tol``,
     ``converged_threshold`` (the bound on `error_estimate` for
-    "converged"), ``relative_error``, ``far_ladder``,
-    ``far_central_values``), for plotting/debugging."""
+    "converged"), ``relative_error``, ``extrapolation_error`` (the
+    extrapolation's own error estimate), ``ladder_sigma`` (the noise level
+    estimated from the ladder's central differences, see
+    `error_estimate`), ``far_ladder``, ``far_central_values``), for
+    plotting/debugging."""
 
     @property
     def resolved(self) -> bool:
@@ -431,6 +443,113 @@ def _cross_regime_component(
     )
 
 
+_LADDER_SIGMA_CAP = 10.0
+"""Maximum ratio of the ladder's noise estimate to the probe's noise
+floor that :func:`_ladder_noise_error` uses."""
+
+_MAD_TO_SIGMA = 0.6744897501960817
+"""The median absolute value of a standard normal variable."""
+
+
+def _ladder_noise_error(
+    ladder: np.ndarray,
+    central_values: np.ndarray,
+    best_index: np.ndarray,
+) -> tuple[np.ndarray, np.ndarray]:
+    """Estimate the noise from the ladder and its effect on the value.
+
+    The noise-floor probe samples the function at offsets of at least
+    its spacing, larger than all ladder steps. If the noise within the
+    ladder is larger, e.g. because the probe estimate is based on only
+    one half of the probe or on a table without a plateau, the error
+    estimate of the extrapolation can be too small.
+
+    Each window of 4 consecutive rungs of a geometric ladder has a linear
+    combination of the central differences that cancels their constant,
+    ``h**2`` and ``h**4`` terms, i.e. the derivative and the leading
+    truncation error. What remains is noise: for function values with
+    independent noise of standard deviation `sigma`, the combination,
+    divided by its standard deviation for ``sigma = 1``, has standard
+    deviation `sigma`. The estimate is the median of the absolute values
+    over the windows that overlap with the rungs ``b - 2, ..., b``, where
+    `b` is the extrapolation's best index, divided by 0.6745 (the median
+    absolute value of a standard normal variable). The median makes it
+    robust to a window in which higher-order truncation terms dominate,
+    typically the coarsest one.
+
+    The standard deviation of the extrapolated value due to this noise
+    is `sigma` times a gain computed from the weights of the selected
+    diagonal entry (:func:`_neville_weights`).
+
+    :param ladder: The step-size ladder, decreasing.
+    :param central_values: The central differences, shape
+        ``(n_rungs, n_outputs)``.
+    :param best_index: The extrapolation's best index per output
+        component.
+    :return: A tuple ``(sigma, gain)``, each of shape ``(n_outputs,)``.
+        ``nan`` if the ladder has fewer than 4 rungs, is not geometric, or
+        has collapsed to zero, or if none of the selected windows is
+        finite.
+    """
+    n_rungs, n_outputs = central_values.shape
+    sigma = np.full(n_outputs, np.nan)
+    gain = np.full(n_outputs, np.nan)
+    if n_rungs < 4 or not np.all(ladder > 0):
+        return sigma, gain
+    ratios = ladder[:-1] / ladder[1:]
+    if not np.allclose(ratios, ratios[0], rtol=1e-8, atol=0):
+        return sigma, gain
+    # (1 - r**0 z)(1 - r**2 z)(1 - r**4 z): annihilates D = a + b h**2 +
+    # c h**4 on rungs h, h / r, h / r**2, h / r**3
+    window_weights = np.array([1.0])
+    for power in (0, 2, 4):
+        window_weights = np.convolve(
+            window_weights, [1.0, -(ratios[0] ** power)]
+        )
+    n_windows = n_rungs - 3
+    windows = np.arange(n_windows)[:, None] + np.arange(4)[None, :]
+    residuals = (
+        np.einsum("i,kij->kj", window_weights, central_values[windows])
+        / np.sqrt(
+            np.sum(window_weights**2 / (2 * ladder[windows] ** 2), axis=1)
+        )[:, None]
+    )
+
+    best_index = np.broadcast_to(np.atleast_1d(best_index), (n_outputs,))
+    k = np.arange(n_windows)[:, None]
+    selected = (
+        (k >= best_index[None, :] - 5)
+        & (k <= best_index[None, :])
+        & np.isfinite(residuals)
+    )
+    n_selected = selected.sum(axis=0)
+    with warnings.catch_warnings():
+        # all-NaN columns (no selected window) give NaN, as intended
+        warnings.simplefilter("ignore", RuntimeWarning)
+        sigma = (
+            np.nanmedian(np.where(selected, np.abs(residuals), np.nan), axis=0)
+            / _MAD_TO_SIGMA
+        )
+
+    gain_by_index = np.array(
+        [
+            np.sqrt(
+                np.sum(
+                    (
+                        _neville_weights(ladder, b)
+                        / (np.sqrt(2) * ladder[: b + 1])
+                    )
+                    ** 2
+                )
+            )
+            for b in range(n_rungs)
+        ]
+    )
+    gain = gain_by_index[best_index]
+    gain[n_selected == 0] = np.nan
+    return sigma, gain
+
+
 def _estimate_from_ladder(
     ladder: np.ndarray,
     f_0: np.ndarray,
@@ -525,7 +644,30 @@ def _estimate_from_ladder(
     )
 
     value_arr = np.atleast_1d(extrapolation.value)
-    error_estimate_arr = np.atleast_1d(extrapolation.error_estimate)
+    extrapolation_error_arr = np.atleast_1d(extrapolation.error_estimate)
+
+    # Cross-check the error estimate against the noise within the ladder
+    # (#97), if the probe's noise floor may be too small. The ladder's
+    # estimate is capped relative to the noise floor, so that a single
+    # deviating evaluation cannot loosen the check arbitrarily.
+    ladder_sigma_arr, ladder_gain_arr = _ladder_noise_error(
+        ladder, central_values, extrapolation.best_index
+    )
+    probe_sigma_arr = np.broadcast_to(
+        np.atleast_1d(noise.sigma), (n_outputs,)
+    ).astype(float)
+    ladder_error_arr = ladder_gain_arr * np.fmin(
+        ladder_sigma_arr,
+        _LADDER_SIGMA_CAP * probe_sigma_arr,
+    )
+    uncertain_probe = np.broadcast_to(
+        np.atleast_1d(noise.one_sided), (n_outputs,)
+    ) | ~np.broadcast_to(np.atleast_1d(noise.confident), (n_outputs,))
+    error_estimate_arr = np.where(
+        uncertain_probe & np.isfinite(ladder_error_arr),
+        np.fmax(extrapolation_error_arr, ladder_error_arr),
+        extrapolation_error_arr,
+    )
 
     far_extrapolation = None
     far_discontinuity = None
@@ -632,6 +774,8 @@ def _estimate_from_ladder(
             "tol": float(tol_arr[j]),
             "converged_threshold": float(threshold_arr[j]),
             "relative_error": float(relative_error_arr[j]),
+            "extrapolation_error": float(extrapolation_error_arr[j]),
+            "ladder_sigma": float(ladder_sigma_arr[j]),
         }
         if far_ladder is not None:
             diagnostics["far_ladder"] = far_ladder
